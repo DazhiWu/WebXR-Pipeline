@@ -481,9 +481,9 @@
     <div id="calibration-panel">
         <div id="calibration-title">📍 位置校准</div>
         <div class="calibration-controls">
-            <div></div>
+            <button class="calibration-btn direction" id="cal-rotate-ccw">↶</button>
             <button class="calibration-btn direction" id="cal-forward">↑</button>
-            <div></div>
+            <button class="calibration-btn direction" id="cal-rotate-cw">↷</button>
             <button class="calibration-btn direction" id="cal-left">←</button>
             <button class="calibration-btn" id="cal-reset-pos">回中</button>
             <button class="calibration-btn direction" id="cal-right">→</button>
@@ -498,7 +498,7 @@
             <button class="calibration-btn" id="cal-scale-smaller">缩小 -</button>
         </div>
         <div id="calibration-offset">
-            偏移: X: 0.0m | Z: 0.0m | Y: 0.0m | 比例: 1.0x
+            偏移: X: 0.0m | Z: 0.0m | Y: 0.0m | 比例: 1.0x | 旋转: 0.0°
         </div>
         <div class="calibration-actions">
             <button id="save-calibration">💾 保存</button>
@@ -531,8 +531,10 @@
             offsetX: 0,
             offsetZ: 0,
             offsetY: 0,
+            rotationY: 0,  // Y轴旋转角度（度）
             scale: 1.0,
-            stepSize: 0.2 // 每次调整0.2米
+            stepSize: 0.2, // 每次调整0.2米
+            rotationStep: 5 // 每次旋转5度
         };
 
         // 真实地下管网数据
@@ -1077,11 +1079,10 @@
             
             const latRad = originLat * Math.PI / 180;
             
-            // 经度方向距离（x轴）- 考虑纬度缩放
-            const x = (lng - originLng) * (Math.PI / 180) * earthRadius * Math.cos(latRad);
-            // 纬度方向距离（z轴）- 使用子午线长度
-            // 注意：z取负数使南北方向正确
-            const z = -(lat - originLat) * (Math.PI / 180) * earthRadius * (1 - 0.00669438 * Math.sin(latRad) * Math.sin(latRad));
+            // 纬度方向距离（x轴）- 北为正方向
+            const x = -(lat - originLat) * (Math.PI / 180) * earthRadius * (1 - 0.00669438 * Math.sin(latRad) * Math.sin(latRad));
+            // 经度方向距离（z轴）- 东为正方向
+            const z = (lng - originLng) * (Math.PI / 180) * earthRadius * Math.cos(latRad);
             
             return { x, z };
         }
@@ -1123,6 +1124,7 @@
             calibration.offsetX = 0;
             calibration.offsetZ = 0;
             calibration.offsetY = 0;
+            calibration.rotationY = 0;
             calibration.scale = 1.0;
             updateCalibrationDisplay();
             applyCalibration();
@@ -1134,7 +1136,8 @@
                 `偏移: X: ${calibration.offsetX.toFixed(1)}m | ` +
                 `Z: ${calibration.offsetZ.toFixed(1)}m | ` +
                 `Y: ${calibration.offsetY.toFixed(1)}m | ` +
-                `比例: ${calibration.scale.toFixed(2)}x`;
+                `比例: ${calibration.scale.toFixed(2)}x | ` +
+                `旋转: ${calibration.rotationY.toFixed(1)}°`;
         }
 
         function applyCalibration() {
@@ -1142,6 +1145,7 @@
                 pipelineGroup.position.x = calibration.offsetX;
                 pipelineGroup.position.z = calibration.offsetZ;
                 pipelineGroup.position.y = calibration.offsetY;
+                pipelineGroup.rotation.y = calibration.rotationY * Math.PI / 180; // 转换为弧度
                 pipelineGroup.scale.set(calibration.scale, calibration.scale, calibration.scale);
             }
         }
@@ -1557,8 +1561,19 @@
             calibrationToggle.addEventListener('click', toggleCalibrationPanel);
 
             // 校准控制
+            // 旋转按钮
+            document.getElementById('cal-rotate-ccw').addEventListener('click', () => {
+                calibration.rotationY -= calibration.rotationStep;
+                updateCalibrationDisplay();
+                applyCalibration();
+            });
             document.getElementById('cal-forward').addEventListener('click', () => {
                 calibration.offsetZ -= calibration.stepSize;
+                updateCalibrationDisplay();
+                applyCalibration();
+            });
+            document.getElementById('cal-rotate-cw').addEventListener('click', () => {
+                calibration.rotationY += calibration.rotationStep;
                 updateCalibrationDisplay();
                 applyCalibration();
             });
@@ -1601,6 +1616,7 @@
                 calibration.offsetX = 0;
                 calibration.offsetZ = 0;
                 calibration.offsetY = 0;
+                calibration.rotationY = 0;
                 updateCalibrationDisplay();
                 applyCalibration();
             });
