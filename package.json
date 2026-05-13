@@ -1,0 +1,16 @@
+{
+  "name": "webar-pipeline-demo",
+  "version": "1.0.0",
+  "description": "WebAR地下管网多端兼容Demo",
+  "main": "index.html",
+  "scripts": {
+    "dev": "npx serve . -l 8080",
+    "dev-ssl": "npx serve . -l 8443 --ssl-cert localhost.pem --ssl-key localhost-key.pem",
+    "build": "echo '纯前端项目，无需构建，直接部署index.html即可'"
+  },
+  "keywords": ["webar", "threejs", "webxr", "gps", "pipeline"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {},
+  "dependencies": {}
+}

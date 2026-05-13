@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>WebAR地下管网Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            touch-action: none;
+        }
+        
+        /* 顶部定位信息栏 */
+        #location-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            color: #fff;
+            padding: 12px 16px;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        #location-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        #location-status {
+            font-size: 12px;
+            color: #4ade80;
+        }
+        
+        /* 启动AR按钮 */
+        #ar-button {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            padding: 14px 32px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s ease;
+        }
+        
+        #ar-button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        
+        #ar-button:hover:not(:disabled) {
+            transform: translateX(-50%) scale(1.05);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        /* 加载和提示遮罩 */
+        #overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 999;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        #overlay.hidden {
+            display: none;
+        }
+        
+        #overlay-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        
+        #overlay-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        #overlay-text {
+            font-size: 14px;
+            color: #aaa;
+            line-height: 1.6;
+            max-width: 300px;
+        }
+        
+        /* 管线详情弹窗 */
+        #pipeline-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1001;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: flex-end;
+        }
+        
+        #pipeline-modal.show {
+            display: flex;
+        }
+        
+        #modal-content {
+            background: #fff;
+            width: 100%;
+            max-width: 500px;
+            border-radius: 20px 20px 0 0;
+            padding: 24px;
+            animation: slideUp 0.3s ease;
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        
+        #modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: #f0f0f0;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            padding-right: 40px;
+        }
+        
+        .modal-row {
+            display: flex;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .modal-label {
+            width: 90px;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .modal-value {
+            flex: 1;
+            color: #333;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        /* Three.js Canvas */
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+        }
+        
+        canvas {
+            display: block;
+        }
+        
+        /* 操作指引 */
+        #instructions {
+            position: fixed;
+            bottom: 100px;
+            left: 0;
+            right: 0;
+            z-index: 998;
+            text-align: center;
+            color: #fff;
+            font-size: 14px;
+            padding: 0 20px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部定位信息栏 -->
+    <div id="location-bar">
+        <div id="location-info">
+            <div id="lat">纬度: --</div>
+            <div id="lng">经度: --</div>
+        </div>
+        <div id="location-status">获取定位中...</div>
+    </div>
+    
+    <!-- 加载/提示遮罩 -->
+    <div id="overlay">
+        <div id="overlay-icon">📍</div>
+        <div id="overlay-title">正在获取位置信息</div>
+        <div id="overlay-text">请允许浏览器获取您的位置权限，以便将管网模型与真实世界对齐</div>
+    </div>
+    
+    <!-- 操作指引 -->
+    <div id="instructions" style="display: none;">
+        移动手机扫描地面，点击管线查看详情
+    </div>
+    
+    <!-- 启动AR按钮 -->
+    <button id="ar-button" disabled>启动AR</button>
+    
+    <!-- Three.js Canvas容器 -->
+    <div id="canvas-container"></div>
+    
+    <!-- 管线详情弹窗 -->
+    <div id="pipeline-modal">
+        <div id="modal-content">
+            <button id="modal-close">×</button>
+            <div id="modal-title">管线详情</div>
+            <div class="modal-row">
+                <span class="modal-label">管线类型</span>
+                <span class="modal-value" id="detail-type">-</span>
+            </div>
+            <div class="modal-row">
+                <span class="modal-label">管径</span>
+                <span class="modal-value" id="detail-diameter">-</span>
+            </div>
+            <div class="modal-row">
+                <span class="modal-label">材质</span>
+                <span class="modal-value" id="detail-material">-</span>
+            </div>
+            <div class="modal-row">
+                <span class="modal-label">埋深</span>
+                <span class="modal-value" id="detail-depth">-</span>
+            </div>
+            <div class="modal-row">
+                <span class="modal-label">权属单位</span>
+                <span class="modal-value" id="detail-owner">-</span>
+            </div>
+            <div class="modal-row">
+                <span class="modal-label">起点坐标</span>
+                <span class="modal-value" id="detail-start">-</span>
+            </div>
+            <div class="modal-row">
+                <span class="modal-label">终点坐标</span>
+                <span class="modal-value" id="detail-end">-</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入Three.js和相关库 -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+    <script>
+        // ==================== 全局变量与配置 ====================
+        let scene, camera, renderer;
+        let currentLocation = null;
+        let pipelineGroup = null;
+        let xrSession = null;
+        let hitTestSource = null;
+        let hitTestSourceRequested = false;
+        let reticle = null;
+        let arAnchor = null;
+        let pipelines = [];
+        let raycaster = new THREE.Raycaster();
+        let pointer = new THREE.Vector2();
+        let isARActive = false;
+
+        // 真实地下管网数据
+        let PIPELINE_DATA = [];
+        let dataCenterLat = 0;
+        let dataCenterLng = 0;
+        
+        // 从文件加载并解析真实管线数据
+        async function loadPipelineData() {
+            try {
+                const response = await fetch('highway.geojsonl.json');
+                const text = await response.text();
+                const lines = text.trim().split('\n');
+                
+                let minLat = Infinity, maxLat = -Infinity;
+                let minLng = Infinity, maxLng = -Infinity;
+                
+                PIPELINE_DATA = lines.map((line, index) => {
+                    const feature = JSON.parse(line);
+                    const props = feature.properties;
+                    const coords = feature.geometry.coordinates;
+                    
+                    // 计算数据范围
+                    coords.forEach(([lng, lat]) => {
+                        if (lat < minLat) minLat = lat;
+                        if (lat > maxLat) maxLat = lat;
+                        if (lng < minLng) minLng = lng;
+                        if (lng > maxLng) maxLng = lng;
+                    });
+                    
+                    // 根据管线颜色
+                    let color = '#3b82f6';
+                    const type = props.gdlx || '未知';
+                    
+                    if (type.includes('排水')) color = '#6b7280';
+                    else if (type.includes('燃气')) color = '#f97316';
+                    else if (type.includes('雨水')) color = '#10b981';
+                    else if (type.includes('污水')) color = '#8b5cf6';
+                    
+                    return {
+                        id: index + 1,
+                        type: type,
+                        color: color,
+                        diameter: parseInt(props.gj) || 100,
+                        material: props.cz || '未知',
+                        depth: 1.5,
+                        owner: props.gldw || '未知',
+                        points: coords.map(([lng, lat]) => ({ lat, lng })),
+                        properties: props
+                    };
+                });
+                
+                // 计算数据中心点
+                dataCenterLat = (minLat + maxLat) / 2;
+                dataCenterLng = (minLng + maxLng) / 2;
+                
+                console.log('管线数据加载完成，共', PIPELINE_DATA.length, '条管线');
+                console.log('数据中心坐标:', dataCenterLat, dataCenterLng);
+                
+            } catch (error) {
+                console.error('加载管线数据失败:', error);
+                // 加载失败时使用默认数据
+                PIPELINE_DATA = [
+                    {
+                        id: 1,
+                        type: '给水',
+                        color: '#3b82f6',
+                        diameter: 300,
+                        material: 'PE管',
+                        depth: 1.5,
+                        owner: '市水务集团',
+                        points: [
+                            { lat: 0, lng: 0 },
+                            { lat: 0.0001, lng: 0.00015 },
+                            { lat: 0.0002, lng: 0.0001 }
+                        ]
+                    }
+                ];
+            }
+        }
+
+        // ==================== DOM元素获取 ====================
+        const locationBar = document.getElementById('location-bar');
+        const latEl = document.getElementById('lat');
+        const lngEl = document.getElementById('lng');
+        const locationStatus = document.getElementById('location-status');
+        const overlay = document.getElementById('overlay');
+        const overlayIcon = document.getElementById('overlay-icon');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayText = document.getElementById('overlay-text');
+        const arButton = document.getElementById('ar-button');
+        const instructions = document.getElementById('instructions');
+        const pipelineModal = document.getElementById('pipeline-modal');
+        const modalClose = document.getElementById('modal-close');
+
+        // ==================== GPS定位模块 ====================
+        let locationAttempts = 0;
+        const maxLocationAttempts = 3;
+        
+        function initGPS() {
+            if (!navigator.geolocation) {
+                showOverlay('❌', '设备不支持定位', '请使用支持GPS定位的移动设备');
+                return;
+            }
+
+            // 检查是否使用HTTPS（移动端必需）
+            if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                showOverlay('⚠️', '建议使用HTTPS', '为确保定位功能正常工作，建议在HTTPS环境下访问');
+            }
+
+            // 首次尝试定位，使用低精度模式快速获取位置
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    handleLocationSuccess(position);
+                },
+                (error) => {
+                    handleLocationErrorWithRetry(error);
+                },
+                {
+                    enableHighAccuracy: false,
+                    timeout: 15000,
+                    maximumAge: 60000
+                }
+            );
+        }
+
+        function handleLocationErrorWithRetry(error) {
+            locationAttempts++;
+            
+            if (locationAttempts < maxLocationAttempts) {
+                console.log(`定位尝试 ${locationAttempts}/${maxLocationAttempts} 失败，正在重试...`);
+                
+                // 增加超时时间，尝试高精度模式
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        handleLocationSuccess(position);
+                    },
+                    (error) => {
+                        handleLocationErrorWithRetry(error);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 20000,
+                        maximumAge: 120000
+                    }
+                );
+            } else {
+                handleLocationError(error);
+            }
+        }
+
+        function handleLocationSuccess(position) {
+            currentLocation = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+            };
+            
+            updateLocationDisplay(currentLocation);
+            locationStatus.textContent = '定位成功';
+            locationStatus.style.color = '#4ade80';
+            
+            // 隐藏定位遮罩，显示AR按钮
+            overlay.classList.add('hidden');
+            arButton.disabled = false;
+            
+            // 生成管网数据（以当前位置为原点偏移）
+            generatePipelineData();
+            
+            // 持续监听位置更新
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    handleLocationUpdate(position);
+                },
+                null,
+                {
+                    enableHighAccuracy: false,
+                    timeout: 10000,
+                    maximumAge: 30000
+                }
+            );
+        }
+
+        function handleLocationUpdate(position) {
+            currentLocation = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+            };
+            updateLocationDisplay(currentLocation);
+        }
+
+        function handleLocationError(error) {
+            let message = '';
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    message = '请允许浏览器获取位置权限';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message = '无法获取位置信息';
+                    break;
+                case error.TIMEOUT:
+                    message = '获取位置超时，请重试';
+                    break;
+                default:
+                    message = '定位失败';
+            }
+            showOverlay('⚠️', '定位失败', message);
+            locationStatus.textContent = '定位失败';
+            locationStatus.style.color = '#ef4444';
+        }
+
+        function updateLocationDisplay(loc) {
+            latEl.textContent = `纬度: ${loc.lat.toFixed(6)}`;
+            lngEl.textContent = `经度: ${loc.lng.toFixed(6)}`;
+        }
+
+        function showOverlay(icon, title, text) {
+            overlayIcon.textContent = icon;
+            overlayTitle.textContent = title;
+            overlayText.textContent = text;
+            overlay.classList.remove('hidden');
+        }
+
+        // ==================== 生成管网数据（基于当前位置和数据中心点） ====================
+        function generatePipelineData() {
+            if (!currentLocation || PIPELINE_DATA.length === 0) return;
+            
+            // 计算数据中心点与当前位置的偏移
+            const latOffset = currentLocation.lat - dataCenterLat;
+            const lngOffset = currentLocation.lng - dataCenterLng;
+            
+            // 应用偏移到每条管线
+            PIPELINE_DATA.forEach(pipeline => {
+                pipeline.worldPoints = pipeline.points.map(p => ({
+                    lat: p.lat + latOffset,
+                    lng: p.lng + lngOffset
+                }));
+            });
+            
+            console.log('管线数据已转换，偏移量:', latOffset, lngOffset);
+        }
+
+        // ==================== 经纬度转Three.js世界坐标 ====================
+        function geoToWorld(lat, lng, originLat, originLng) {
+            // 简化的平面投影（适合小范围区域）
+            const earthRadius = 6371000; // 地球半径（米）
+            
+            // 纬度方向距离（每度约111320米）
+            const x = (lng - originLng) * (Math.PI / 180) * earthRadius * Math.cos(originLat * Math.PI / 180);
+            // 经度方向距离
+            const z = (lat - originLat) * (Math.PI / 180) * earthRadius;
+            
+            return { x, z };
+        }
+
+        // ==================== Three.js初始化 ====================
+        function initThreeJS() {
+            scene = new THREE.Scene();
+            
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 1000);
+            
+            renderer = new THREE.WebGLRenderer({
+                antialias: true,
+                alpha: true
+            });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            
+            // 添加环境光
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+            
+            // 添加方向光
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+            
+            // 创建管网组
+            pipelineGroup = new THREE.Group();
+            scene.add(pipelineGroup);
+            
+            // 创建地面检测标记
+            createReticle();
+            
+            // 窗口大小变化处理
+            window.addEventListener('resize', onWindowResize);
+            
+            // 触摸/点击事件
+            renderer.domElement.addEventListener('touchstart', onPointerDown);
+            renderer.domElement.addEventListener('click', onPointerDown);
+            
+            // 模态框关闭
+            modalClose.addEventListener('click', () => {
+                pipelineModal.classList.remove('show');
+            });
+            
+            pipelineModal.addEventListener('click', (e) => {
+                if (e.target === pipelineModal) {
+                    pipelineModal.classList.remove('show');
+                }
+            });
+        }
+
+        function createReticle() {
+            const ringGeometry = new THREE.RingGeometry(0.1, 0.15, 32);
+            const ringMaterial = new THREE.MeshBasicMaterial({
+                color: 0x667eea,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.8
+            });
+            reticle = new THREE.Mesh(ringGeometry, ringMaterial);
+            reticle.rotation.x = -Math.PI / 2;
+            reticle.visible = false;
+            scene.add(reticle);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // ==================== 创建3D管线模型 ====================
+        function createPipelines() {
+            if (!currentLocation) return;
+            
+            pipelineGroup.clear();
+            pipelines = [];
+            
+            PIPELINE_DATA.forEach(pipeline => {
+                const worldPoints = [];
+                for (let i = 0; i < pipeline.worldPoints.length; i++) {
+                    const p = pipeline.worldPoints[i];
+                    const worldPos = geoToWorld(p.lat, p.lng, currentLocation.lat, currentLocation.lng);
+                    worldPoints.push(new THREE.Vector3(worldPos.x, -pipeline.depth, worldPos.z));
+                }
+                
+                // 创建管线几何体
+                const curve = new THREE.CatmullRomCurve3(worldPoints);
+                const tubeGeometry = new THREE.TubeGeometry(curve, 64, pipeline.diameter / 2000, 16, false);
+                
+                // 创建半透明材质（透视效果）
+                const tubeMaterial = new THREE.MeshPhongMaterial({
+                    color: new THREE.Color(pipeline.color),
+                    transparent: true,
+                    opacity: 0.7,
+                    side: THREE.DoubleSide
+                });
+                
+                const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
+                tube.userData = {
+                    pipelineId: pipeline.id,
+                    ...pipeline
+                };
+                
+                pipelineGroup.add(tube);
+                pipelines.push(tube);
+                
+                // 添加管线连接节点
+                worldPoints.forEach((point, index) => {
+                    const sphereGeometry = new THREE.SphereGeometry(pipeline.diameter / 1500, 16, 16);
+                    const sphereMaterial = new THREE.MeshPhongMaterial({
+                        color: new THREE.Color(pipeline.color),
+                        transparent: true,
+                        opacity: 0.9
+                    });
+                    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                    sphere.position.copy(point);
+                    sphere.userData = tube.userData;
+                    pipelineGroup.add(sphere);
+                    pipelines.push(sphere);
+                });
+            });
+        }
+
+        // ==================== 射线拾取（点击管线） ====================
+        function onPointerDown(event) {
+            if (!isARActive) return;
+            
+            // 计算指针位置
+            const rect = renderer.domElement.getBoundingClientRect();
+            const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+            const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+            
+            pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+            
+            raycaster.setFromCamera(pointer, camera);
+            const intersects = raycaster.intersectObjects(pipelines, false);
+            
+            if (intersects.length > 0) {
+                const object = intersects[0].object;
+                showPipelineDetail(object.userData);
+            }
+        }
+
+        function showPipelineDetail(data) {
+            document.getElementById('detail-type').textContent = data.type;
+            document.getElementById('detail-diameter').textContent = data.diameter + 'mm';
+            document.getElementById('detail-material').textContent = data.material;
+            document.getElementById('detail-depth').textContent = data.depth + 'm';
+            document.getElementById('detail-owner').textContent = data.owner;
+            document.getElementById('detail-start').textContent = 
+                `${data.worldPoints[0].lat.toFixed(6)}, ${data.worldPoints[0].lng.toFixed(6)}`;
+            document.getElementById('detail-end').textContent = 
+                `${data.worldPoints[data.worldPoints.length - 1].lat.toFixed(6)}, ${data.worldPoints[data.worldPoints.length - 1].lng.toFixed(6)}`;
+            
+            pipelineModal.classList.add('show');
+        }
+
+        // ==================== WebXR AR初始化 ====================
+        function initWebXR() {
+            if (!navigator.xr) {
+                showOverlay('❌', '设备不支持WebXR', '请使用支持WebXR的浏览器');
+                arButton.disabled = true;
+                return;
+            }
+            
+            navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+                if (!supported) {
+                    showOverlay('❌', '设备不支持AR模式', '请使用支持ARCore/ARKit的设备');
+                    arButton.disabled = true;
+                }
+            });
+        }
+
+        async function startAR() {
+            try {
+                const session = await navigator.xr.requestSession('immersive-ar', {
+                    requiredFeatures: ['hit-test', 'local-floor'],
+                    optionalFeatures: ['dom-overlay'],
+                    domOverlay: { root: document.body }
+                });
+                
+                xrSession = session;
+                renderer.xr.setSession(session);
+                
+                session.addEventListener('end', onSessionEnd);
+                
+                isARActive = true;
+                arButton.style.display = 'none';
+                instructions.style.display = 'block';
+                
+                // 开始渲染循环
+                renderer.setAnimationLoop(render);
+                
+            } catch (error) {
+                console.error('AR启动失败:', error);
+                showOverlay('❌', 'AR启动失败', '请确保设备支持AR并允许相机权限');
+            }
+        }
+
+        function onSessionEnd() {
+            xrSession = null;
+            isARActive = false;
+            arButton.style.display = 'block';
+            arButton.disabled = false;
+            instructions.style.display = 'none';
+            pipelineGroup.visible = false;
+            if (arAnchor) {
+                scene.remove(arAnchor);
+                arAnchor = null;
+            }
+        }
+
+        // ==================== 渲染循环 ====================
+        function render(timestamp, frame) {
+            if (frame) {
+                const referenceSpace = renderer.xr.getReferenceSpace();
+                const session = renderer.xr.getSession();
+                
+                // 请求hit test source
+                if (!hitTestSourceRequested && referenceSpace) {
+                    hitTestSourceRequested = true;
+                    session.requestReferenceSpace('viewer').then((viewerSpace) => {
+                        session.requestHitTestSource({ space: viewerSpace }).then((source) => {
+                            hitTestSource = source;
+                        });
+                    });
+                }
+                
+                // 执行hit test
+                if (hitTestSource && !arAnchor) {
+                    const hitTestResults = frame.getHitTestResults(hitTestSource);
+                    
+                    if (hitTestResults.length > 0) {
+                        const hit = hitTestResults[0];
+                        const hitPose = hit.getPose(referenceSpace);
+                        
+                        if (hitPose) {
+                            reticle.visible = true;
+                            reticle.matrix.fromArray(hitPose.transform.matrix);
+                            reticle.matrix.decompose(reticle.position, reticle.quaternion, reticle.scale);
+                            
+                            // 当检测到地面且锚点未创建时，自动创建锚点并放置管网
+                            if (!arAnchor) {
+                                createARAnchor(hitPose.transform.matrix, referenceSpace);
+                            }
+                        }
+                    } else {
+                        reticle.visible = false;
+                    }
+                }
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        function createARAnchor(matrix, referenceSpace) {
+            arAnchor = new THREE.Group();
+            arAnchor.matrix.fromArray(matrix);
+            arAnchor.matrix.decompose(arAnchor.position, arAnchor.quaternion, arAnchor.scale);
+            arAnchor.matrixAutoUpdate = false;
+            scene.add(arAnchor);
+            
+            // 创建管网
+            createPipelines();
+            
+            // 将管网添加到锚点下
+            if (pipelineGroup) {
+                arAnchor.add(pipelineGroup);
+                pipelineGroup.visible = true;
+            }
+            
+            // 隐藏标记
+            reticle.visible = false;
+            instructions.textContent = '点击管线查看详情信息';
+        }
+
+        // ==================== 主初始化函数 ====================
+        async function init() {
+            // 先加载管线数据
+            await loadPipelineData();
+            
+            initThreeJS();
+            initWebXR();
+            initGPS();
+            
+            // AR按钮点击事件
+            arButton.addEventListener('click', startAR);
+        }
+
+        // 启动应用
+        init();
+    </script>
+</body>
+</html>
