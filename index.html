@@ -889,13 +889,8 @@
             updateLocationDisplay(currentLocation);
             updateAccuracyDisplay(currentAccuracy);
             
-            // 重新生成管线数据（实时跟随位置）
-            generatePipelineData();
-            
-            // 如果AR已启动，更新管线位置
-            if (arAnchor && pipelineGroup) {
-                updatePipelinePosition();
-            }
+            // 注意：已关闭自动重新渲染功能
+            // 管线位置不会随GPS位置更新而自动变化
             
             console.log('位置已更新:', newLat.toFixed(6), newLng.toFixed(6), '精度:', newAccuracy.toFixed(1) + 'm');
         }
@@ -1085,7 +1080,8 @@
             // 经度方向距离（x轴）- 考虑纬度缩放
             const x = (lng - originLng) * (Math.PI / 180) * earthRadius * Math.cos(latRad);
             // 纬度方向距离（z轴）- 使用子午线长度
-            const z = (lat - originLat) * (Math.PI / 180) * earthRadius * (1 - 0.00669438 * Math.sin(latRad) * Math.sin(latRad));
+            // 注意：z取负数使南北方向正确
+            const z = -(lat - originLat) * (Math.PI / 180) * earthRadius * (1 - 0.00669438 * Math.sin(latRad) * Math.sin(latRad));
             
             return { x, z };
         }
@@ -1166,10 +1162,15 @@
             locationStatus.textContent = text;
             locationStatus.style.color = '#4ade80';
             setTimeout(() => {
-                if (currentAccuracy) {
+                // 恢复原来的状态
+                if (currentLocation && currentAccuracy) {
                     const level = getAccuracyLevel(currentAccuracy);
+                    locationStatus.textContent = `定位成功`;
                     locationStatus.style.color = level === 'excellent' || level === 'good' ? '#4ade80' : 
                                                   level === 'moderate' ? '#fbbf24' : '#ef4444';
+                } else {
+                    locationStatus.textContent = original;
+                    locationStatus.style.color = '';
                 }
             }, 2000);
         }
@@ -1212,7 +1213,10 @@
                 lng: ORIGIN_LNG
             };
             
-            // 更新显示
+            // 更新经纬度显示
+            updateLocationDisplay(currentLocation);
+            
+            // 更新状态显示
             locationStatus.textContent = '原点校准成功';
             locationStatus.style.color = '#4ade80';
             
