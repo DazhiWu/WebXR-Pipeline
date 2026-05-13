@@ -110,6 +110,112 @@
         #recenter-btn:hover:not(:disabled) {
             transform: scale(1.05);
         }
+
+        /* 校准面板 */
+        #calibration-panel {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 15px 20px;
+            border-radius: 15px;
+            z-index: 1000;
+            display: none;
+            color: white;
+            min-width: 280px;
+        }
+
+        #calibration-panel.show {
+            display: block;
+            animation: slideUp 0.3s ease;
+        }
+
+        #calibration-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .calibration-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .calibration-btn {
+            padding: 8px 12px;
+            background: rgba(102, 126, 234, 0.3);
+            border: 1px solid rgba(102, 126, 234, 0.5);
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .calibration-btn:hover {
+            background: rgba(102, 126, 234, 0.6);
+        }
+
+        .calibration-btn.direction {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .calibration-btn-center {
+            grid-column: 2;
+        }
+
+        .calibration-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .calibration-actions button {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        #save-calibration {
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            color: white;
+        }
+
+        #reset-calibration {
+            background: rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            border: 1px solid #ef4444;
+        }
+
+        #calibration-toggle {
+            padding: 6px 12px;
+            background: rgba(139, 92, 246, 0.3);
+            border: 1px solid rgba(139, 92, 246, 0.5);
+            border-radius: 16px;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+
+        #calibration-toggle.active {
+            background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+        }
+
+        #calibration-offset {
+            font-size: 11px;
+            color: #aaa;
+            text-align: center;
+            margin-top: 8px;
+        }
         
         /* 启动AR按钮 */
         #ar-button {
@@ -306,8 +412,9 @@
                     <option value="GCJ02">数据坐标系: GCJ02</option>
                 </select>
             </div>
-            <div style="display: flex; gap: 8px;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;">
                 <button id="recenter-btn" disabled>重新定位</button>
+                <button id="calibration-toggle">校准</button>
             </div>
         </div>
     </div>
@@ -366,6 +473,35 @@
         </div>
     </div>
 
+    <!-- 校准面板 -->
+    <div id="calibration-panel">
+        <div id="calibration-title">📍 位置校准</div>
+        <div class="calibration-controls">
+            <div></div>
+            <button class="calibration-btn direction" id="cal-forward">↑</button>
+            <div></div>
+            <button class="calibration-btn direction" id="cal-left">←</button>
+            <button class="calibration-btn" id="cal-reset-pos">回中</button>
+            <button class="calibration-btn direction" id="cal-right">→</button>
+            <div></div>
+            <button class="calibration-btn direction" id="cal-back">↓</button>
+            <div></div>
+        </div>
+        <div class="calibration-controls">
+            <button class="calibration-btn" id="cal-up">抬升 +</button>
+            <button class="calibration-btn" id="cal-down">下降 -</button>
+            <button class="calibration-btn" id="cal-scale-bigger">放大 +</button>
+            <button class="calibration-btn" id="cal-scale-smaller">缩小 -</button>
+        </div>
+        <div id="calibration-offset">
+            偏移: X: 0.0m | Z: 0.0m | Y: 0.0m | 比例: 1.0x
+        </div>
+        <div class="calibration-actions">
+            <button id="save-calibration">💾 保存</button>
+            <button id="reset-calibration">↺ 重置</button>
+        </div>
+    </div>
+
     <!-- 引入Three.js和相关库 -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 
@@ -385,6 +521,15 @@
         let pointer = new THREE.Vector2();
         let isARActive = false;
         let watchPositionId = null;
+
+        // 校准参数
+        let calibration = {
+            offsetX: 0,
+            offsetZ: 0,
+            offsetY: 0,
+            scale: 1.0,
+            stepSize: 0.2 // 每次调整0.2米
+        };
 
         // 真实地下管网数据
         let PIPELINE_DATA = [];
@@ -595,6 +740,9 @@
         const accuracyText = document.getElementById('accuracy-text');
         const recenterBtn = document.getElementById('recenter-btn');
         const coordSystemSelect = document.getElementById('coord-system-select');
+        const calibrationToggle = document.getElementById('calibration-toggle');
+        const calibrationPanel = document.getElementById('calibration-panel');
+        const calibrationOffset = document.getElementById('calibration-offset');
         const overlay = document.getElementById('overlay');
         const overlayIcon = document.getElementById('overlay-icon');
         const overlayTitle = document.getElementById('overlay-title');
@@ -895,6 +1043,81 @@
             createPipelines();
         }
 
+        // ==================== 校准功能 ====================
+        function loadCalibration() {
+            try {
+                const saved = localStorage.getItem('pipeline_calibration');
+                if (saved) {
+                    calibration = { ...calibration, ...JSON.parse(saved) };
+                    updateCalibrationDisplay();
+                    console.log('已加载校准参数:', calibration);
+                }
+            } catch (e) {
+                console.log('无法加载校准参数');
+            }
+        }
+
+        function saveCalibration() {
+            try {
+                localStorage.setItem('pipeline_calibration', JSON.stringify(calibration));
+                console.log('校准参数已保存');
+                showTemporaryMessage('校准已保存!');
+            } catch (e) {
+                console.error('保存失败:', e);
+            }
+        }
+
+        function resetCalibration() {
+            calibration.offsetX = 0;
+            calibration.offsetZ = 0;
+            calibration.offsetY = 0;
+            calibration.scale = 1.0;
+            updateCalibrationDisplay();
+            applyCalibration();
+            console.log('校准已重置');
+        }
+
+        function updateCalibrationDisplay() {
+            calibrationOffset.textContent = 
+                `偏移: X: ${calibration.offsetX.toFixed(1)}m | ` +
+                `Z: ${calibration.offsetZ.toFixed(1)}m | ` +
+                `Y: ${calibration.offsetY.toFixed(1)}m | ` +
+                `比例: ${calibration.scale.toFixed(2)}x`;
+        }
+
+        function applyCalibration() {
+            if (pipelineGroup) {
+                pipelineGroup.position.x = calibration.offsetX;
+                pipelineGroup.position.z = calibration.offsetZ;
+                pipelineGroup.position.y = calibration.offsetY;
+                pipelineGroup.scale.set(calibration.scale, calibration.scale, calibration.scale);
+            }
+        }
+
+        function toggleCalibrationPanel() {
+            const isShowing = calibrationPanel.classList.contains('show');
+            if (isShowing) {
+                calibrationPanel.classList.remove('show');
+                calibrationToggle.classList.remove('active');
+            } else {
+                calibrationPanel.classList.add('show');
+                calibrationToggle.classList.add('active');
+            }
+        }
+
+        function showTemporaryMessage(text) {
+            const original = locationStatus.textContent;
+            locationStatus.textContent = text;
+            locationStatus.style.color = '#4ade80';
+            setTimeout(() => {
+                if (currentAccuracy) {
+                    const level = getAccuracyLevel(currentAccuracy);
+                    locationStatus.style.color = level === 'excellent' || level === 'good' ? '#4ade80' : 
+                                                  level === 'moderate' ? '#fbbf24' : '#ef4444';
+                }
+            }, 2000);
+        }
+
         // ==================== Three.js初始化 ====================
         function initThreeJS() {
             scene = new THREE.Scene();
@@ -1016,6 +1239,9 @@
                     pipelines.push(sphere);
                 });
             });
+
+            // 应用校准
+            applyCalibration();
         }
 
         // ==================== 射线拾取（点击管线） ====================
@@ -1174,6 +1400,9 @@
 
         // ==================== 主初始化函数 ====================
         async function init() {
+            // 加载保存的校准参数
+            loadCalibration();
+            
             // 先加载管线数据
             await loadPipelineData();
             
@@ -1199,6 +1428,60 @@
                     }
                 }
             });
+
+            // 校准面板切换
+            calibrationToggle.addEventListener('click', toggleCalibrationPanel);
+
+            // 校准控制
+            document.getElementById('cal-forward').addEventListener('click', () => {
+                calibration.offsetZ -= calibration.stepSize;
+                updateCalibrationDisplay();
+                applyCalibration();
+            });
+            document.getElementById('cal-back').addEventListener('click', () => {
+                calibration.offsetZ += calibration.stepSize;
+                updateCalibrationDisplay();
+                applyCalibration();
+            });
+            document.getElementById('cal-left').addEventListener('click', () => {
+                calibration.offsetX -= calibration.stepSize;
+                updateCalibrationDisplay();
+                applyCalibration();
+            });
+            document.getElementById('cal-right').addEventListener('click', () => {
+                calibration.offsetX += calibration.stepSize;
+                updateCalibrationDisplay();
+                applyCalibration();
+            });
+            document.getElementById('cal-up').addEventListener('click', () => {
+                calibration.offsetY += calibration.stepSize;
+                updateCalibrationDisplay();
+                applyCalibration();
+            });
+            document.getElementById('cal-down').addEventListener('click', () => {
+                calibration.offsetY -= calibration.stepSize;
+                updateCalibrationDisplay();
+                applyCalibration();
+            });
+            document.getElementById('cal-scale-bigger').addEventListener('click', () => {
+                calibration.scale += 0.05;
+                updateCalibrationDisplay();
+                applyCalibration();
+            });
+            document.getElementById('cal-scale-smaller').addEventListener('click', () => {
+                calibration.scale = Math.max(0.1, calibration.scale - 0.05);
+                updateCalibrationDisplay();
+                applyCalibration();
+            });
+            document.getElementById('cal-reset-pos').addEventListener('click', () => {
+                calibration.offsetX = 0;
+                calibration.offsetZ = 0;
+                calibration.offsetY = 0;
+                updateCalibrationDisplay();
+                applyCalibration();
+            });
+            document.getElementById('save-calibration').addEventListener('click', saveCalibration);
+            document.getElementById('reset-calibration').addEventListener('click', resetCalibration);
         }
 
         // 启动应用
