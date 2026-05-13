@@ -37,6 +37,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
         }
         
         #location-info {
@@ -48,6 +50,65 @@
         #location-status {
             font-size: 12px;
             color: #4ade80;
+        }
+        
+        #accuracy-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+        }
+        
+        #accuracy-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+        }
+        
+        #accuracy-dots {
+            display: flex;
+            gap: 2px;
+        }
+        
+        .accuracy-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #666;
+        }
+        
+        .accuracy-dot.active {
+            background: #4ade80;
+        }
+        
+        .accuracy-dot.warning {
+            background: #fbbf24;
+        }
+        
+        .accuracy-dot.danger {
+            background: #ef4444;
+        }
+        
+        #recenter-btn {
+            padding: 6px 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 16px;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        #recenter-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        
+        #recenter-btn:hover:not(:disabled) {
+            transform: scale(1.05);
         }
         
         /* 启动AR按钮 */
@@ -226,7 +287,29 @@
             <div id="lat">纬度: --</div>
             <div id="lng">经度: --</div>
         </div>
-        <div id="location-status">获取定位中...</div>
+        <div id="accuracy-info">
+            <div id="location-status">获取定位中...</div>
+            <div id="accuracy-bar">
+                <div id="accuracy-dots">
+                    <div class="accuracy-dot"></div>
+                    <div class="accuracy-dot"></div>
+                    <div class="accuracy-dot"></div>
+                    <div class="accuracy-dot"></div>
+                    <div class="accuracy-dot"></div>
+                </div>
+                <span id="accuracy-text">精度: --</span>
+            </div>
+            <div>
+                <select id="coord-system-select" style="margin: 5px 0; padding: 3px; border-radius: 4px;">
+                    <option value="CGCS2000">数据坐标系: CGCS2000</option>
+                    <option value="WGS84">数据坐标系: WGS84</option>
+                    <option value="GCJ02">数据坐标系: GCJ02</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button id="recenter-btn" disabled>重新定位</button>
+            </div>
+        </div>
     </div>
     
     <!-- 加载/提示遮罩 -->
@@ -290,6 +373,7 @@
         // ==================== 全局变量与配置 ====================
         let scene, camera, renderer;
         let currentLocation = null;
+        let currentAccuracy = null;
         let pipelineGroup = null;
         let xrSession = null;
         let hitTestSource = null;
@@ -300,11 +384,112 @@
         let raycaster = new THREE.Raycaster();
         let pointer = new THREE.Vector2();
         let isARActive = false;
+        let watchPositionId = null;
 
         // 真实地下管网数据
         let PIPELINE_DATA = [];
         let dataCenterLat = 0;
         let dataCenterLng = 0;
+
+        // 坐标系配置
+        const COORD_CONFIG = {
+            USE_PLANAR_COORDS: false,  // 是否使用平面坐标(x0,y0等)
+            DATA_GEO_COORD_SYSTEM: 'CGCS2000',  // 数据地理坐标系: WGS84, CGCS2000, GCJ02
+            GPS_COORD_SYSTEM: 'WGS84',  // GPS输出坐标系
+            
+            // 温州2000坐标系参数（如果需要平面坐标转换）
+            WENZHOU2000: {
+                CENTRAL_MERIDIAN: 120.5,  // 中央子午线（推测）
+                SCALE_FACTOR: 1.0,
+                FALSE_EASTING: 500000,
+                FALSE_NORTHING: 0
+            }
+        };
+
+        // ==================== 坐标系转换算法 ====================
+        // CGCS2000 与 WGS84 差异极小（厘米级），可近似认为相同
+        function cgcs2000ToWgs84(lat, lng) {
+            return { lat, lng }; // 近似直接转换
+        }
+
+        function wgs84ToCgcs2000(lat, lng) {
+            return { lat, lng }; // 近似直接转换
+        }
+
+        // WGS84 转 GCJ02 (火星坐标系)
+        function wgs84ToGcj02(lat, lng) {
+            const a = 6378245.0;
+            const ee = 0.00669342162296594323;
+            
+            if (outOfChina(lat, lng)) {
+                return { lat, lng };
+            }
+            
+            let dLat = transformLat(lng - 105.0, lat - 35.0);
+            let dLng = transformLng(lng - 105.0, lat - 35.0);
+            const radLat = lat / 180.0 * Math.PI;
+            let magic = Math.sin(radLat);
+            magic = 1 - ee * magic * magic;
+            const sqrtMagic = Math.sqrt(magic);
+            dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * Math.PI);
+            dLng = (dLng * 180.0) / (a / sqrtMagic * Math.cos(radLat) * Math.PI);
+            
+            return {
+                lat: lat + dLat,
+                lng: lng + dLng
+            };
+        }
+
+        // GCJ02 转 WGS84
+        function gcj02ToWgs84(lat, lng) {
+            const gps = wgs84ToGcj02(lat, lng);
+            return {
+                lat: lat * 2 - gps.lat,
+                lng: lng * 2 - gps.lng
+            };
+        }
+
+        // 通用坐标系转换
+        function convertCoords(lat, lng, fromSystem, toSystem) {
+            if (fromSystem === toSystem) return { lat, lng };
+            
+            // 先统一转到 WGS84
+            let wgs84 = { lat, lng };
+            if (fromSystem === 'GCJ02') {
+                wgs84 = gcj02ToWgs84(lat, lng);
+            } else if (fromSystem === 'CGCS2000') {
+                wgs84 = cgcs2000ToWgs84(lat, lng);
+            }
+            
+            // 再从 WGS84 转到目标坐标系
+            if (toSystem === 'GCJ02') {
+                return wgs84ToGcj02(wgs84.lat, wgs84.lng);
+            } else if (toSystem === 'CGCS2000') {
+                return wgs84ToCgcs2000(wgs84.lat, wgs84.lng);
+            }
+            
+            return wgs84;
+        }
+
+        function outOfChina(lat, lng) {
+            return (lng < 72.004 || lng > 137.8347) || (lat < 0.8293 || lat > 55.8271);
+        }
+
+        function transformLat(lng, lat) {
+            let ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * Math.sqrt(Math.abs(lng));
+            ret += (20.0 * Math.sin(6.0 * lng * Math.PI) + 20.0 * Math.sin(2.0 * lng * Math.PI)) * 2.0 / 3.0;
+            ret += (20.0 * Math.sin(lat * Math.PI) + 40.0 * Math.sin(lat / 3.0 * Math.PI)) * 2.0 / 3.0;
+            ret += (160.0 * Math.sin(lat / 12.0 * Math.PI) + 320 * Math.sin(lat * Math.PI / 30.0)) * 2.0 / 3.0;
+            return ret;
+        }
+
+        function transformLng(lng, lat) {
+            let ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * Math.sqrt(Math.abs(lng));
+            ret += (20.0 * Math.sin(6.0 * lng * Math.PI) + 20.0 * Math.sin(2.0 * lng * Math.PI)) * 2.0 / 3.0;
+            ret += (20.0 * Math.sin(lng * Math.PI) + 40.0 * Math.sin(lng / 3.0 * Math.PI)) * 2.0 / 3.0;
+            ret += (150.0 * Math.sin(lng / 12.0 * Math.PI) + 300.0 * Math.sin(lng / 30.0 * Math.PI)) * 2.0 / 3.0;
+            return ret;
+        }
         
         // 从文件加载并解析真实管线数据
         async function loadPipelineData() {
@@ -315,11 +500,20 @@
                 
                 let minLat = Infinity, maxLat = -Infinity;
                 let minLng = Infinity, maxLng = -Infinity;
+                let minX = Infinity, maxX = -Infinity;
+                let minY = Infinity, maxY = -Infinity;
                 
                 PIPELINE_DATA = lines.map((line, index) => {
                     const feature = JSON.parse(line);
                     const props = feature.properties;
                     const coords = feature.geometry.coordinates;
+                    
+                    // 提取平面坐标（如果可用）
+                    const planarPoints = [];
+                    if (props.x0 !== null && props.y0 !== null && props.x1 !== null && props.y1 !== null) {
+                        planarPoints.push({ x: props.x0, y: props.y0 });
+                        planarPoints.push({ x: props.x1, y: props.y1 });
+                    }
                     
                     // 计算数据范围
                     coords.forEach(([lng, lat]) => {
@@ -327,6 +521,13 @@
                         if (lat > maxLat) maxLat = lat;
                         if (lng < minLng) minLng = lng;
                         if (lng > maxLng) maxLng = lng;
+                    });
+                    
+                    planarPoints.forEach(({ x, y }) => {
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
                     });
                     
                     // 根据管线颜色
@@ -347,6 +548,7 @@
                         depth: 1.5,
                         owner: props.gldw || '未知',
                         points: coords.map(([lng, lat]) => ({ lat, lng })),
+                        planarPoints: planarPoints,
                         properties: props
                     };
                 });
@@ -356,7 +558,11 @@
                 dataCenterLng = (minLng + maxLng) / 2;
                 
                 console.log('管线数据加载完成，共', PIPELINE_DATA.length, '条管线');
-                console.log('数据中心坐标:', dataCenterLat, dataCenterLng);
+                console.log('地理坐标中心:', dataCenterLat, dataCenterLng);
+                if (minX !== Infinity) {
+                    console.log('平面坐标范围 X:', minX, '-', maxX, 'Y:', minY, '-', maxY);
+                    console.log('平面坐标中心:', (minX + maxX) / 2, (minY + maxY) / 2);
+                }
                 
             } catch (error) {
                 console.error('加载管线数据失败:', error);
@@ -374,7 +580,8 @@
                             { lat: 0, lng: 0 },
                             { lat: 0.0001, lng: 0.00015 },
                             { lat: 0.0002, lng: 0.0001 }
-                        ]
+                        ],
+                        planarPoints: []
                     }
                 ];
             }
@@ -385,6 +592,9 @@
         const latEl = document.getElementById('lat');
         const lngEl = document.getElementById('lng');
         const locationStatus = document.getElementById('location-status');
+        const accuracyText = document.getElementById('accuracy-text');
+        const recenterBtn = document.getElementById('recenter-btn');
+        const coordSystemSelect = document.getElementById('coord-system-select');
         const overlay = document.getElementById('overlay');
         const overlayIcon = document.getElementById('overlay-icon');
         const overlayTitle = document.getElementById('overlay-title');
@@ -397,6 +607,7 @@
         // ==================== GPS定位模块 ====================
         let locationAttempts = 0;
         const maxLocationAttempts = 3;
+        const MIN_ACCEPTABLE_ACCURACY = 20; // 最小可接受精度（米）
         
         function initGPS() {
             if (!navigator.geolocation) {
@@ -409,40 +620,46 @@
                 showOverlay('⚠️', '建议使用HTTPS', '为确保定位功能正常工作，建议在HTTPS环境下访问');
             }
 
-            // 首次尝试定位，使用低精度模式快速获取位置
+            locationStatus.textContent = '正在获取高精度定位...';
+            requestHighAccuracyLocation();
+        }
+
+        function requestHighAccuracyLocation() {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
                     handleLocationSuccess(position);
                 },
                 (error) => {
-                    handleLocationErrorWithRetry(error);
+                    handleLocationErrorWithRetry(error, true);
                 },
                 {
-                    enableHighAccuracy: false,
-                    timeout: 15000,
-                    maximumAge: 60000
+                    enableHighAccuracy: true,
+                    timeout: 20000,
+                    maximumAge: 0
                 }
             );
         }
 
-        function handleLocationErrorWithRetry(error) {
+        function handleLocationErrorWithRetry(error, wasHighAccuracy) {
             locationAttempts++;
             
             if (locationAttempts < maxLocationAttempts) {
                 console.log(`定位尝试 ${locationAttempts}/${maxLocationAttempts} 失败，正在重试...`);
+                locationStatus.textContent = `定位重试 ${locationAttempts}/${maxLocationAttempts}...`;
                 
-                // 增加超时时间，尝试高精度模式
+                // 交替尝试高精度和低精度
+                const useHighAccuracy = !wasHighAccuracy;
                 navigator.geolocation.getCurrentPosition(
                     (position) => {
                         handleLocationSuccess(position);
                     },
                     (error) => {
-                        handleLocationErrorWithRetry(error);
+                        handleLocationErrorWithRetry(error, useHighAccuracy);
                     },
                     {
-                        enableHighAccuracy: true,
-                        timeout: 20000,
-                        maximumAge: 120000
+                        enableHighAccuracy: useHighAccuracy,
+                        timeout: useHighAccuracy ? 20000 : 15000,
+                        maximumAge: useHighAccuracy ? 0 : 60000
                     }
                 );
             } else {
@@ -455,38 +672,69 @@
                 lat: position.coords.latitude,
                 lng: position.coords.longitude
             };
+            currentAccuracy = position.coords.accuracy;
             
             updateLocationDisplay(currentLocation);
-            locationStatus.textContent = '定位成功';
-            locationStatus.style.color = '#4ade80';
+            updateAccuracyDisplay(currentAccuracy);
             
-            // 隐藏定位遮罩，显示AR按钮
-            overlay.classList.add('hidden');
-            arButton.disabled = false;
+            const accuracyLevel = getAccuracyLevel(currentAccuracy);
             
-            // 生成管网数据（以当前位置为原点偏移）
+            if (accuracyLevel === 'excellent' || accuracyLevel === 'good') {
+                locationStatus.textContent = '定位成功 ✓';
+                locationStatus.style.color = '#4ade80';
+                overlay.classList.add('hidden');
+                arButton.disabled = false;
+                recenterBtn.disabled = false;
+            } else if (accuracyLevel === 'moderate') {
+                locationStatus.textContent = '定位可用 (精度一般)';
+                locationStatus.style.color = '#fbbf24';
+                overlay.classList.add('hidden');
+                arButton.disabled = false;
+                recenterBtn.disabled = false;
+            } else {
+                locationStatus.textContent = `精度较差 (${Math.round(currentAccuracy)}m)，建议到室外`;
+                locationStatus.style.color = '#ef4444';
+                overlay.classList.add('hidden');
+                arButton.disabled = false;
+                recenterBtn.disabled = false;
+            }
+            
             generatePipelineData();
             
-            // 持续监听位置更新
-            navigator.geolocation.watchPosition(
+            if (watchPositionId) {
+                navigator.geolocation.clearWatch(watchPositionId);
+            }
+            watchPositionId = navigator.geolocation.watchPosition(
                 (position) => {
                     handleLocationUpdate(position);
                 },
-                null,
+                (error) => {
+                    console.log('位置监听错误:', error);
+                },
                 {
-                    enableHighAccuracy: false,
+                    enableHighAccuracy: true,
                     timeout: 10000,
-                    maximumAge: 30000
+                    maximumAge: 5000
                 }
             );
         }
 
         function handleLocationUpdate(position) {
-            currentLocation = {
-                lat: position.coords.latitude,
-                lng: position.coords.longitude
-            };
-            updateLocationDisplay(currentLocation);
+            const newLat = position.coords.latitude;
+            const newLng = position.coords.longitude;
+            const newAccuracy = position.coords.accuracy;
+            
+            if (newAccuracy < currentAccuracy || !currentLocation) {
+                currentLocation = { lat: newLat, lng: newLng };
+                currentAccuracy = newAccuracy;
+                updateLocationDisplay(currentLocation);
+                updateAccuracyDisplay(currentAccuracy);
+                generatePipelineData();
+                
+                if (arAnchor && pipelineGroup) {
+                    updatePipelinePosition();
+                }
+            }
         }
 
         function handleLocationError(error) {
@@ -496,22 +744,77 @@
                     message = '请允许浏览器获取位置权限';
                     break;
                 case error.POSITION_UNAVAILABLE:
-                    message = '无法获取位置信息';
+                    message = '无法获取位置信息，请到室外开阔区域';
                     break;
                 case error.TIMEOUT:
-                    message = '获取位置超时，请重试';
+                    message = '获取位置超时，请检查GPS是否开启';
                     break;
                 default:
-                    message = '定位失败';
+                    message = '定位失败，请重试';
             }
             showOverlay('⚠️', '定位失败', message);
             locationStatus.textContent = '定位失败';
             locationStatus.style.color = '#ef4444';
+            recenterBtn.disabled = false;
         }
 
         function updateLocationDisplay(loc) {
             latEl.textContent = `纬度: ${loc.lat.toFixed(6)}`;
             lngEl.textContent = `经度: ${loc.lng.toFixed(6)}`;
+        }
+
+        function updateAccuracyDisplay(accuracy) {
+            accuracyText.textContent = `精度: ${Math.round(accuracy)}m`;
+            
+            const dots = document.querySelectorAll('.accuracy-dot');
+            const level = getAccuracyLevel(accuracy);
+            
+            dots.forEach((dot, index) => {
+                dot.className = 'accuracy-dot';
+                
+                if (level === 'excellent' && index < 5) {
+                    dot.classList.add('active');
+                } else if (level === 'good' && index < 4) {
+                    dot.classList.add('active');
+                } else if (level === 'moderate' && index < 3) {
+                    dot.classList.add(index < 2 ? 'active' : 'warning');
+                } else if (level === 'poor' && index < 2) {
+                    dot.classList.add('warning');
+                } else if (level === 'bad') {
+                    dot.classList.add('danger');
+                }
+            });
+        }
+
+        function getAccuracyLevel(accuracy) {
+            if (accuracy <= 5) return 'excellent';
+            if (accuracy <= 10) return 'good';
+            if (accuracy <= 20) return 'moderate';
+            if (accuracy <= 50) return 'poor';
+            return 'bad';
+        }
+
+        function recenterLocation() {
+            locationAttempts = 0;
+            locationStatus.textContent = '重新定位中...';
+            recenterBtn.disabled = true;
+            arButton.disabled = true;
+            overlay.classList.remove('hidden');
+            overlayIcon.textContent = '📍';
+            overlayTitle.textContent = '正在重新定位';
+            overlayText.textContent = '请确保在室外开阔区域，GPS信号良好';
+            
+            if (watchPositionId) {
+                navigator.geolocation.clearWatch(watchPositionId);
+                watchPositionId = null;
+            }
+            
+            if (arAnchor) {
+                scene.remove(arAnchor);
+                arAnchor = null;
+            }
+            
+            requestHighAccuracyLocation();
         }
 
         function showOverlay(icon, title, text) {
@@ -525,32 +828,71 @@
         function generatePipelineData() {
             if (!currentLocation || PIPELINE_DATA.length === 0) return;
             
-            // 计算数据中心点与当前位置的偏移
-            const latOffset = currentLocation.lat - dataCenterLat;
-            const lngOffset = currentLocation.lng - dataCenterLng;
-            
-            // 应用偏移到每条管线
-            PIPELINE_DATA.forEach(pipeline => {
-                pipeline.worldPoints = pipeline.points.map(p => ({
-                    lat: p.lat + latOffset,
-                    lng: p.lng + lngOffset
-                }));
-            });
-            
-            console.log('管线数据已转换，偏移量:', latOffset, lngOffset);
+            if (COORD_CONFIG.USE_PLANAR_COORDS) {
+                console.log('使用平面坐标模式');
+                // 平面坐标模式 - 将当前GPS位置转换为平面坐标（简化版）
+                const gpsInDataSystem = convertCoords(
+                    currentLocation.lat, 
+                    currentLocation.lng, 
+                    COORD_CONFIG.GPS_COORD_SYSTEM, 
+                    COORD_CONFIG.DATA_GEO_COORD_SYSTEM
+                );
+                
+                // 简化：直接使用GPS到平面坐标的偏移（实际项目需要七参数转换）
+                PIPELINE_DATA.forEach(pipeline => {
+                    pipeline.worldPointsPlanar = pipeline.planarPoints;
+                });
+                
+            } else {
+                // 地理坐标模式
+                console.log('使用地理坐标模式，数据坐标系:', COORD_CONFIG.DATA_GEO_COORD_SYSTEM);
+                
+                // 将当前 GPS 坐标转换到数据坐标系
+                const gpsInDataSystem = convertCoords(
+                    currentLocation.lat, 
+                    currentLocation.lng, 
+                    COORD_CONFIG.GPS_COORD_SYSTEM, 
+                    COORD_CONFIG.DATA_GEO_COORD_SYSTEM
+                );
+                
+                // 计算数据中心点与当前位置的偏移
+                const latOffset = gpsInDataSystem.lat - dataCenterLat;
+                const lngOffset = gpsInDataSystem.lng - dataCenterLng;
+                
+                // 应用偏移到每条管线
+                PIPELINE_DATA.forEach(pipeline => {
+                    pipeline.worldPoints = pipeline.points.map(p => ({
+                        lat: p.lat + latOffset,
+                        lng: p.lng + lngOffset
+                    }));
+                });
+                
+                console.log('管线数据已转换，偏移量:', latOffset, lngOffset);
+            }
         }
 
         // ==================== 经纬度转Three.js世界坐标 ====================
         function geoToWorld(lat, lng, originLat, originLng) {
-            // 简化的平面投影（适合小范围区域）
-            const earthRadius = 6371000; // 地球半径（米）
+            // 使用更精确的平面投影（适合小范围区域）
+            const earthRadius = 6378137; // WGS84 地球长半轴（米）
             
-            // 纬度方向距离（每度约111320米）
-            const x = (lng - originLng) * (Math.PI / 180) * earthRadius * Math.cos(originLat * Math.PI / 180);
-            // 经度方向距离
-            const z = (lat - originLat) * (Math.PI / 180) * earthRadius;
+            const latRad = originLat * Math.PI / 180;
+            
+            // 经度方向距离（x轴）- 考虑纬度缩放
+            const x = (lng - originLng) * (Math.PI / 180) * earthRadius * Math.cos(latRad);
+            // 纬度方向距离（z轴）- 使用子午线长度
+            const z = (lat - originLat) * (Math.PI / 180) * earthRadius * (1 - 0.00669438 * Math.sin(latRad) * Math.sin(latRad));
             
             return { x, z };
+        }
+
+        // ==================== 更新管线位置 ====================
+        function updatePipelinePosition() {
+            if (!currentLocation || !arAnchor || !pipelineGroup) return;
+            
+            pipelineGroup.clear();
+            pipelines = [];
+            createPipelines();
         }
 
         // ==================== Three.js初始化 ====================
@@ -841,6 +1183,22 @@
             
             // AR按钮点击事件
             arButton.addEventListener('click', startAR);
+            
+            // 重新定位按钮点击事件
+            recenterBtn.addEventListener('click', recenterLocation);
+            
+            // 坐标系选择事件
+            coordSystemSelect.addEventListener('change', (e) => {
+                COORD_CONFIG.DATA_GEO_COORD_SYSTEM = e.target.value;
+                console.log('切换数据坐标系为:', e.target.value);
+                if (currentLocation) {
+                    generatePipelineData();
+                    // 如果AR已启动，更新管线位置
+                    if (arAnchor && pipelineGroup) {
+                        updatePipelinePosition();
+                    }
+                }
+            });
         }
 
         // 启动应用
