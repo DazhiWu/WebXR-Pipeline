@@ -407,12 +407,16 @@
             </div>
             <div>
                 <select id="coord-system-select" style="margin: 5px 0; padding: 3px; border-radius: 4px;">
+                    <option value="WGS84" selected>数据坐标系: WGS84</option>
                     <option value="CGCS2000">数据坐标系: CGCS2000</option>
-                    <option value="WGS84">数据坐标系: WGS84</option>
                     <option value="GCJ02">数据坐标系: GCJ02</option>
                 </select>
             </div>
+            <div id="distance-info" style="font-size: 12px; margin: 5px 0; padding: 5px; background: rgba(0,0,0,0.3); border-radius: 4px;">
+                距离数据区域: --
+            </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;">
+                <button id="origin-calibrate-btn" style="font-size: 11px; padding: 4px 8px; background: rgba(255, 149, 0, 0.3);">原点校准</button>
                 <button id="recenter-btn" disabled>重新定位</button>
                 <button id="calibration-toggle">校准</button>
             </div>
@@ -533,13 +537,14 @@
 
         // 真实地下管网数据
         let PIPELINE_DATA = [];
+        let ORIGINAL_PIPELINE_DATA = []; // 保存原始数据
         let dataCenterLat = 0;
         let dataCenterLng = 0;
 
         // 坐标系配置
         const COORD_CONFIG = {
             USE_PLANAR_COORDS: false,  // 是否使用平面坐标(x0,y0等)
-            DATA_GEO_COORD_SYSTEM: 'CGCS2000',  // 数据地理坐标系: WGS84, CGCS2000, GCJ02
+            DATA_GEO_COORD_SYSTEM: 'WGS84',  // 数据地理坐标系: WGS84, CGCS2000, GCJ02
             GPS_COORD_SYSTEM: 'WGS84',  // GPS输出坐标系
             
             // 温州2000坐标系参数（如果需要平面坐标转换）
@@ -648,7 +653,7 @@
                 let minX = Infinity, maxX = -Infinity;
                 let minY = Infinity, maxY = -Infinity;
                 
-                PIPELINE_DATA = lines.map((line, index) => {
+                const loadedData = lines.map((line, index) => {
                     const feature = JSON.parse(line);
                     const props = feature.properties;
                     const coords = feature.geometry.coordinates;
@@ -698,6 +703,10 @@
                     };
                 });
                 
+                // 保存原始数据的副本
+                ORIGINAL_PIPELINE_DATA = JSON.parse(JSON.stringify(loadedData));
+                PIPELINE_DATA = loadedData;
+                
                 // 计算数据中心点
                 dataCenterLat = (minLat + maxLat) / 2;
                 dataCenterLng = (minLng + maxLng) / 2;
@@ -712,7 +721,7 @@
             } catch (error) {
                 console.error('加载管线数据失败:', error);
                 // 加载失败时使用默认数据
-                PIPELINE_DATA = [
+                const defaultData = [
                     {
                         id: 1,
                         type: '给水',
@@ -729,6 +738,8 @@
                         planarPoints: []
                     }
                 ];
+                ORIGINAL_PIPELINE_DATA = JSON.parse(JSON.stringify(defaultData));
+                PIPELINE_DATA = defaultData;
             }
         }
 
@@ -861,8 +872,8 @@
                 },
                 {
                     enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 5000
+                    timeout: 3000, // 更快的超时
+                    maximumAge: 0 // 不使用缓存位置
                 }
             );
         }
@@ -872,17 +883,21 @@
             const newLng = position.coords.longitude;
             const newAccuracy = position.coords.accuracy;
             
-            if (newAccuracy < currentAccuracy || !currentLocation) {
-                currentLocation = { lat: newLat, lng: newLng };
-                currentAccuracy = newAccuracy;
-                updateLocationDisplay(currentLocation);
-                updateAccuracyDisplay(currentAccuracy);
-                generatePipelineData();
-                
-                if (arAnchor && pipelineGroup) {
-                    updatePipelinePosition();
-                }
+            // 更新位置显示（即使精度没有更好也要显示最新位置）
+            currentLocation = { lat: newLat, lng: newLng };
+            currentAccuracy = newAccuracy;
+            updateLocationDisplay(currentLocation);
+            updateAccuracyDisplay(currentAccuracy);
+            
+            // 重新生成管线数据（实时跟随位置）
+            generatePipelineData();
+            
+            // 如果AR已启动，更新管线位置
+            if (arAnchor && pipelineGroup) {
+                updatePipelinePosition();
             }
+            
+            console.log('位置已更新:', newLat.toFixed(6), newLng.toFixed(6), '精度:', newAccuracy.toFixed(1) + 'm');
         }
 
         function handleLocationError(error) {
@@ -972,51 +987,92 @@
             overlay.classList.remove('hidden');
         }
 
-        // ==================== 生成管网数据（基于当前位置和数据中心点） ====================
+        // ==================== 生成管网数据（保持真实地理位置） ====================
         function generatePipelineData() {
-            if (!currentLocation || PIPELINE_DATA.length === 0) return;
+            if (!currentLocation || ORIGINAL_PIPELINE_DATA.length === 0) return;
+            
+            console.log('重新生成管线数据，数据坐标系:', COORD_CONFIG.DATA_GEO_COORD_SYSTEM, 'GPS坐标系:', COORD_CONFIG.GPS_COORD_SYSTEM);
+            
+            // 从原始数据重新生成
+            PIPELINE_DATA = JSON.parse(JSON.stringify(ORIGINAL_PIPELINE_DATA));
             
             if (COORD_CONFIG.USE_PLANAR_COORDS) {
                 console.log('使用平面坐标模式');
                 // 平面坐标模式 - 将当前GPS位置转换为平面坐标（简化版）
-                const gpsInDataSystem = convertCoords(
-                    currentLocation.lat, 
-                    currentLocation.lng, 
-                    COORD_CONFIG.GPS_COORD_SYSTEM, 
-                    COORD_CONFIG.DATA_GEO_COORD_SYSTEM
-                );
-                
-                // 简化：直接使用GPS到平面坐标的偏移（实际项目需要七参数转换）
                 PIPELINE_DATA.forEach(pipeline => {
                     pipeline.worldPointsPlanar = pipeline.planarPoints;
                 });
                 
             } else {
-                // 地理坐标模式
-                console.log('使用地理坐标模式，数据坐标系:', COORD_CONFIG.DATA_GEO_COORD_SYSTEM);
+                // 地理坐标模式：保持管线的真实地理位置
+                console.log('使用地理坐标模式，正在转换坐标系...');
                 
-                // 将当前 GPS 坐标转换到数据坐标系
-                const gpsInDataSystem = convertCoords(
-                    currentLocation.lat, 
-                    currentLocation.lng, 
-                    COORD_CONFIG.GPS_COORD_SYSTEM, 
-                    COORD_CONFIG.DATA_GEO_COORD_SYSTEM
-                );
-                
-                // 计算数据中心点与当前位置的偏移
-                const latOffset = gpsInDataSystem.lat - dataCenterLat;
-                const lngOffset = gpsInDataSystem.lng - dataCenterLng;
-                
-                // 应用偏移到每条管线
+                // 1. 将数据坐标转换到GPS坐标系
                 PIPELINE_DATA.forEach(pipeline => {
-                    pipeline.worldPoints = pipeline.points.map(p => ({
-                        lat: p.lat + latOffset,
-                        lng: p.lng + lngOffset
+                    pipeline.pointsInGPS = pipeline.points.map(p => {
+                        return convertCoords(
+                            p.lat,
+                            p.lng,
+                            COORD_CONFIG.DATA_GEO_COORD_SYSTEM,
+                            COORD_CONFIG.GPS_COORD_SYSTEM
+                        );
+                    });
+                });
+                
+                // 2. 计算数据在GPS坐标系中的范围
+                let minLatGPS = Infinity, maxLatGPS = -Infinity;
+                let minLngGPS = Infinity, maxLngGPS = -Infinity;
+                PIPELINE_DATA.forEach(pipeline => {
+                    pipeline.pointsInGPS.forEach(p => {
+                        if (p.lat < minLatGPS) minLatGPS = p.lat;
+                        if (p.lat > maxLatGPS) maxLatGPS = p.lat;
+                        if (p.lng < minLngGPS) minLngGPS = p.lng;
+                        if (p.lng > maxLngGPS) maxLngGPS = p.lng;
+                    });
+                });
+                
+                const dataCenterGPSLat = (minLatGPS + maxLatGPS) / 2;
+                const dataCenterGPSLng = (minLngGPS + maxLngGPS) / 2;
+                
+                // 3. 使用真实坐标，保持地理位置不变
+                PIPELINE_DATA.forEach(pipeline => {
+                    pipeline.worldPoints = pipeline.pointsInGPS.map(p => ({
+                        lat: p.lat,
+                        lng: p.lng
                     }));
                 });
                 
-                console.log('管线数据已转换，偏移量:', latOffset, lngOffset);
+                // 4. 计算当前位置与数据中心的距离
+                const distance = calculateDistance(
+                    currentLocation.lat, currentLocation.lng,
+                    dataCenterGPSLat, dataCenterGPSLng
+                );
+                
+                // 更新UI显示距离
+                updateDistanceDisplay(distance);
+                
+                console.log('坐标系转换完成');
+                console.log('数据中心(GPS):', dataCenterGPSLat.toFixed(6), dataCenterGPSLng.toFixed(6));
+                console.log('当前位置:', currentLocation.lat.toFixed(6), currentLocation.lng.toFixed(6));
+                console.log('距离数据中心:', distance.toFixed(1) + '米');
+                
+                if (distance > 1000) {
+                    console.warn('⚠️ 您距离数据区域较远 (' + distance.toFixed(0) + '米)，管线可能不在视野范围内');
+                }
             }
+        }
+
+        // ==================== 计算两点之间的距离（米） ====================
+        function calculateDistance(lat1, lng1, lat2, lng2) {
+            const R = 6371000; // 地球半径（米）
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLng = (lng2 - lng1) * Math.PI / 180;
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                Math.sin(dLng/2) * Math.sin(dLng/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
         }
 
         // ==================== 经纬度转Three.js世界坐标 ====================
@@ -1116,6 +1172,67 @@
                                                   level === 'moderate' ? '#fbbf24' : '#ef4444';
                 }
             }, 2000);
+        }
+
+        // ==================== 更新距离显示 ====================
+        function updateDistanceDisplay(distance) {
+            const distanceInfo = document.getElementById('distance-info');
+            
+            // 更新距离显示
+            let distanceText = '';
+            let bgColor = 'rgba(0,0,0,0.3)';
+            
+            if (distance < 100) {
+                distanceText = '📍 距离数据区域: ' + distance.toFixed(0) + '米 (在范围内)';
+                bgColor = 'rgba(74, 222, 128, 0.3)';
+            } else if (distance < 500) {
+                distanceText = '📍 距离数据区域: ' + distance.toFixed(0) + '米';
+                bgColor = 'rgba(251, 191, 36, 0.3)';
+            } else {
+                distanceText = '⚠️ 距离数据区域: ' + (distance/1000).toFixed(1) + '公里 (较远)';
+                bgColor = 'rgba(239, 68, 68, 0.3)';
+            }
+            
+            distanceInfo.textContent = distanceText;
+            distanceInfo.style.background = bgColor;
+        }
+
+        // ==================== 原点校准 ====================
+        function originCalibrate() {
+            // 预设的原点坐标
+            const ORIGIN_LAT = 27.967431;
+            const ORIGIN_LNG = 120.667297;
+            
+            console.log('执行原点校准');
+            console.log('设置位置为:', ORIGIN_LAT, ORIGIN_LNG);
+            
+            // 更新当前位置
+            currentLocation = {
+                lat: ORIGIN_LAT,
+                lng: ORIGIN_LNG
+            };
+            
+            // 更新显示
+            locationStatus.textContent = '原点校准成功';
+            locationStatus.style.color = '#4ade80';
+            
+            // 重新生成管线数据
+            generatePipelineData();
+            
+            // 如果AR已启动，立即更新管线渲染
+            if (arAnchor && pipelineGroup) {
+                updatePipelinePosition();
+            }
+            
+            // 显示提示信息
+            showTemporaryMessage('原点校准完成');
+            
+            // 按钮高亮提示
+            const btn = document.getElementById('origin-calibrate-btn');
+            btn.style.background = 'rgba(74, 222, 128, 0.4)';
+            setTimeout(() => {
+                btn.style.background = 'rgba(255, 149, 0, 0.3)';
+            }, 1000);
         }
 
         // ==================== Three.js初始化 ====================
@@ -1428,6 +1545,9 @@
                     }
                 }
             });
+
+            // 原点校准事件
+            document.getElementById('origin-calibrate-btn').addEventListener('click', originCalibrate);
 
             // 校准面板切换
             calibrationToggle.addEventListener('click', toggleCalibrationPanel);
