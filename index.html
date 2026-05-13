@@ -1079,10 +1079,11 @@
             
             const latRad = originLat * Math.PI / 180;
             
-            // 纬度方向距离（x轴）- 北为正方向
-            const x = -(lat - originLat) * (Math.PI / 180) * earthRadius * (1 - 0.00669438 * Math.sin(latRad) * Math.sin(latRad));
-            // 经度方向距离（z轴）- 东为正方向
-            const z = (lng - originLng) * (Math.PI / 180) * earthRadius * Math.cos(latRad);
+            // 经度方向距离（x轴）- 考虑纬度缩放
+            const x = (lng - originLng) * (Math.PI / 180) * earthRadius * Math.cos(latRad);
+            // 纬度方向距离（z轴）- 使用子午线长度
+            // 注意：z取负数使南北方向正确
+            const z = -(lat - originLat) * (Math.PI / 180) * earthRadius * (1 - 0.00669438 * Math.sin(latRad) * Math.sin(latRad));
             
             return { x, z };
         }
