@@ -1422,27 +1422,57 @@
         }
 
         async function startAR() {
-            try {
-                const session = await navigator.xr.requestSession('immersive-ar', {
+            const strategies = [
+                {
+                    label: '完整特性(Android)',
                     requiredFeatures: ['hit-test', 'local-floor'],
                     optionalFeatures: ['dom-overlay'],
                     domOverlay: { root: document.body }
-                });
-                
-                xrSession = session;
-                renderer.xr.setSession(session);
-                
-                session.addEventListener('end', onSessionEnd);
-                
-                isARActive = true;
-                arButton.style.display = 'none';
-                instructions.style.display = 'block';
-                
-                // 开始渲染循环
-                renderer.setAnimationLoop(render);
-                
-            } catch (error) {
-                console.error('AR启动失败:', error);
+                },
+                {
+                    label: '降级(iOS Safari)',
+                    requiredFeatures: ['local'],
+                    optionalFeatures: ['hit-test']
+                }
+            ];
+
+            let lastError = null;
+
+            for (const strategy of strategies) {
+                try {
+                    console.log('尝试AR会话策略:', strategy.label);
+                    const session = await navigator.xr.requestSession('immersive-ar', strategy);
+
+                    xrSession = session;
+                    renderer.xr.setSession(session);
+
+                    session.addEventListener('end', onSessionEnd);
+
+                    isARActive = true;
+                    arButton.style.display = 'none';
+                    instructions.style.display = 'block';
+
+                    renderer.setAnimationLoop(render);
+                    console.log('AR启动成功，使用策略:', strategy.label);
+                    return;
+                } catch (error) {
+                    lastError = error;
+                    console.warn('AR策略失败:', strategy.label, error.name, error.message);
+                }
+            }
+
+            console.error('所有AR启动策略均失败:', lastError);
+
+            const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+            if (isIOS) {
+                showOverlay('❌', 'AR启动失败',
+                    'iOS Safari 可能需刷新页面后重试。\n' +
+                    '请确保：\n' +
+                    '1. iOS 17+ 系统版本\n' +
+                    '2. 设置 → Safari → 相机 设为"询问"\n' +
+                    '3. 关闭其他使用相机的App\n' +
+                    '错误: ' + (lastError ? lastError.message : '未知'));
+            } else {
                 showOverlay('❌', 'AR启动失败', '请确保设备支持AR并允许相机权限');
             }
         }
@@ -1472,7 +1502,11 @@
                     session.requestReferenceSpace('viewer').then((viewerSpace) => {
                         session.requestHitTestSource({ space: viewerSpace }).then((source) => {
                             hitTestSource = source;
+                        }).catch((err) => {
+                            console.warn('hit-test不可用，将使用锚点模式:', err.message);
                         });
+                    }).catch((err) => {
+                        console.warn('viewer参考空间不可用:', err.message);
                     });
                 }
                 
