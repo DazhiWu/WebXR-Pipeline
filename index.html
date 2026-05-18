@@ -508,11 +508,14 @@
 
     <!-- 引入Three.js和相关库 -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <!-- 高斯泼溅3D渲染库 -->
+    <script src="https://cdn.jsdelivr.net/npm/@mkkellogg/gaussian-splats-3d@0.4.6/build/gaussian-splats-3d.umd.js"></script>
 
     <script>
         // ==================== 全局变量与配置 ====================
         let scene, camera, renderer;
         let currentLocation = null;
+        let initialLocation = null;  // 保存初始位置
         let currentAccuracy = null;
         let pipelineGroup = null;
         let xrSession = null;
@@ -525,6 +528,11 @@
         let pointer = new THREE.Vector2();
         let isARActive = false;
         let watchPositionId = null;
+        
+        // 高斯泼溅相关
+        let gaussianViewer = null;
+        let gaussianGroup = null;
+        let gaussianInfo = { hasGeoCoords: false, lat: 0, lng: 0 };
 
         // 校准参数
         let calibration = {
@@ -745,6 +753,190 @@
             }
         }
 
+        // ==================== 高斯泼溅加载模块 ====================
+        
+        /**
+         * 解析 PLY 文件头部，检查是否包含经纬度信息
+         */
+        async function parsePLYHeaderForCoords(url) {
+            try {
+                const response = await fetch(url);
+                const reader = response.body.getReader();
+                let text = '';
+                const decoder = new TextDecoder('utf-8');
+                let done = false;
+                
+                while (!done) {
+                    const { value, done: streamDone } = await reader.read();
+                    done = streamDone;
+                    if (value) {
+                        text += decoder.decode(value, { stream: !done });
+                        
+                        // 只解析头部，直到找到 'end_header'
+                        if (text.includes('end_header')) {
+                            reader.cancel();
+                            break;
+                        }
+                        
+                        // 防止加载太多数据
+                        if (text.length > 5000) {
+                            reader.cancel();
+                            break;
+                        }
+                    }
+                }
+                
+                // 检查常见的经纬度属性名
+                const latNames = ['lat', 'latitude', 'latitude_deg', 'lon', 'longitude', 'longitude_deg'];
+                let hasGeoCoords = false;
+                let lat = 0, lng = 0;
+                
+                // 检查头部中是否有相关属性
+                const lines = text.split('\n');
+                for (let line of lines) {
+                    if (line.startsWith('property')) {
+                        for (let name of latNames) {
+                            if (line.toLowerCase().includes(name)) {
+                                hasGeoCoords = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (line.trim() === 'end_header') break;
+                }
+                
+                // 如果有geo coords，尝试获取中心点（简化版 - 实际可能需要读取更多数据）
+                // 这里我们假设如果有geo属性，我们可以根据情况处理
+                // 实际项目中可能需要从模型的bounding box或metadata中获取
+                
+                return {
+                    hasGeoCoords: hasGeoCoords,
+                    lat: lat,
+                    lng: lng,
+                    headerText: text
+                };
+            } catch (e) {
+                console.warn('解析PLY头部失败:', e);
+                return { hasGeoCoords: false, lat: 0, lng: 0, headerText: '' };
+            }
+        }
+        
+        /**
+         * 加载高斯泼溅模型
+         */
+        async function loadGaussianSplat(url) {
+            try {
+                showOverlay('📦', '正在加载高斯泼溅模型', '请稍候...');
+                
+                // 先解析PLY头部
+                gaussianInfo = await parsePLYHeaderForCoords(url);
+                console.log('高斯泼溅模型信息:', gaussianInfo);
+                
+                // 创建高斯泼溅组
+                if (gaussianGroup) {
+                    scene.remove(gaussianGroup);
+                }
+                gaussianGroup = new THREE.Group();
+                
+                // 直接使用 GaussianSplatMesh 来加载（更直接的Three.js集成）
+                // 使用更底层的API来避免Viewer的复杂性
+                if (typeof GaussianSplats3D.GaussianSplatMesh !== 'undefined') {
+                    const mesh = new GaussianSplats3D.GaussianSplatMesh({
+                        sharedMemoryForWorkers: false,
+                    });
+                    
+                    await mesh.loadFile(url);
+                    
+                    gaussianGroup.add(mesh);
+                    console.log('使用GaussianSplatMesh加载成功');
+                } else {
+                    // 回退到Viewer方式
+                    const viewer = new GaussianSplats3D.Viewer({
+                        selfDrivenMode: false, // 不使用库自己的渲染循环
+                        sharedMemoryForWorkers: false,
+                        ignoreDevicePixelRatio: false,
+                        useBuiltInControls: false, // 不使用库的控制
+                    });
+                    
+                    await viewer.addSplatScene(url, {
+                        splatAlphaRemovalThreshold: 5,
+                        showLoadingUI: true,
+                        position: [0, 0, 0],
+                        rotation: [0, 0, 0, 1],
+                        scale: [1, 1, 1],
+                    });
+                    
+                    // 尝试获取内部的 THREE.js 组
+                    if (viewer.scene) {
+                        gaussianGroup.add(viewer.scene);
+                    } else if (viewer.root) {
+                        gaussianGroup.add(viewer.root);
+                    }
+                    
+                    gaussianViewer = viewer;
+                }
+                
+                // 添加到主场景
+                scene.add(gaussianGroup);
+                
+                // 位置对齐
+                alignGaussianToLocation();
+                
+                overlay.classList.add('hidden');
+                console.log('高斯泼溅模型加载成功');
+                
+            } catch (error) {
+                console.error('加载高斯泼溅模型失败:', error);
+                showOverlay('❌', '加载高斯泼溅模型失败', error.message || '请检查控制台');
+            }
+        }
+        
+        /**
+         * 对齐高斯泼溅模型到正确的GPS位置
+         */
+        function alignGaussianToLocation() {
+            if (!gaussianGroup) return;
+            
+            // 确定使用哪个位置
+            let targetLat, targetLng;
+            
+            if (gaussianInfo.hasGeoCoords && gaussianInfo.lat !== 0 && gaussianInfo.lng !== 0) {
+                // 使用模型自带的经纬度
+                targetLat = gaussianInfo.lat;
+                targetLng = gaussianInfo.lng;
+                console.log('使用模型自带经纬度:', targetLat, targetLng);
+            } else if (initialLocation) {
+                // 使用初始位置
+                targetLat = initialLocation.lat;
+                targetLng = initialLocation.lng;
+                console.log('使用初始位置:', targetLat, targetLng);
+            } else if (currentLocation) {
+                // 使用当前位置
+                targetLat = currentLocation.lat;
+                targetLng = currentLocation.lng;
+                console.log('使用当前位置:', targetLat, targetLng);
+            } else {
+                console.warn('没有可用的位置信息');
+                return;
+            }
+            
+            // 计算相对于当前位置的世界坐标
+            const originLat = currentLocation ? currentLocation.lat : targetLat;
+            const originLng = currentLocation ? currentLocation.lng : targetLng;
+            
+            const worldPos = geoToWorld(targetLat, targetLng, originLat, originLng);
+            
+            // 设置高斯泼溅模型位置
+            // 注意：可能需要根据模型实际尺寸进行调整
+            gaussianGroup.position.set(worldPos.x, 0, worldPos.z);
+            
+            // 如果有锚点，移动到锚点下
+            if (arAnchor) {
+                scene.remove(gaussianGroup);
+                arAnchor.add(gaussianGroup);
+            }
+        }
+
         // ==================== DOM元素获取 ====================
         const locationBar = document.getElementById('location-bar');
         const latEl = document.getElementById('lat');
@@ -834,6 +1026,12 @@
                 lng: position.coords.longitude
             };
             currentAccuracy = position.coords.accuracy;
+            
+            // 保存初始位置
+            if (!initialLocation) {
+                initialLocation = { ...currentLocation };
+                console.log('初始位置已保存:', initialLocation);
+            }
             
             updateLocationDisplay(currentLocation);
             updateAccuracyDisplay(currentAccuracy);
@@ -1422,57 +1620,27 @@
         }
 
         async function startAR() {
-            const strategies = [
-                {
-                    label: '完整特性(Android)',
+            try {
+                const session = await navigator.xr.requestSession('immersive-ar', {
                     requiredFeatures: ['hit-test', 'local-floor'],
                     optionalFeatures: ['dom-overlay'],
                     domOverlay: { root: document.body }
-                },
-                {
-                    label: '降级(iOS Safari)',
-                    requiredFeatures: ['local'],
-                    optionalFeatures: ['hit-test']
-                }
-            ];
-
-            let lastError = null;
-
-            for (const strategy of strategies) {
-                try {
-                    console.log('尝试AR会话策略:', strategy.label);
-                    const session = await navigator.xr.requestSession('immersive-ar', strategy);
-
-                    xrSession = session;
-                    renderer.xr.setSession(session);
-
-                    session.addEventListener('end', onSessionEnd);
-
-                    isARActive = true;
-                    arButton.style.display = 'none';
-                    instructions.style.display = 'block';
-
-                    renderer.setAnimationLoop(render);
-                    console.log('AR启动成功，使用策略:', strategy.label);
-                    return;
-                } catch (error) {
-                    lastError = error;
-                    console.warn('AR策略失败:', strategy.label, error.name, error.message);
-                }
-            }
-
-            console.error('所有AR启动策略均失败:', lastError);
-
-            const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
-            if (isIOS) {
-                showOverlay('❌', 'AR启动失败',
-                    'iOS Safari 可能需刷新页面后重试。\n' +
-                    '请确保：\n' +
-                    '1. iOS 17+ 系统版本\n' +
-                    '2. 设置 → Safari → 相机 设为"询问"\n' +
-                    '3. 关闭其他使用相机的App\n' +
-                    '错误: ' + (lastError ? lastError.message : '未知'));
-            } else {
+                });
+                
+                xrSession = session;
+                renderer.xr.setSession(session);
+                
+                session.addEventListener('end', onSessionEnd);
+                
+                isARActive = true;
+                arButton.style.display = 'none';
+                instructions.style.display = 'block';
+                
+                // 开始渲染循环
+                renderer.setAnimationLoop(render);
+                
+            } catch (error) {
+                console.error('AR启动失败:', error);
                 showOverlay('❌', 'AR启动失败', '请确保设备支持AR并允许相机权限');
             }
         }
@@ -1502,11 +1670,7 @@
                     session.requestReferenceSpace('viewer').then((viewerSpace) => {
                         session.requestHitTestSource({ space: viewerSpace }).then((source) => {
                             hitTestSource = source;
-                        }).catch((err) => {
-                            console.warn('hit-test不可用，将使用锚点模式:', err.message);
                         });
-                    }).catch((err) => {
-                        console.warn('viewer参考空间不可用:', err.message);
                     });
                 }
                 
@@ -1534,6 +1698,11 @@
                 }
             }
             
+            // 渲染高斯泼溅模型（如果加载了）
+            if (gaussianViewer && gaussianViewer.render) {
+                gaussianViewer.render(timestamp);
+            }
+            
             renderer.render(scene, camera);
         }
 
@@ -1553,6 +1722,12 @@
                 pipelineGroup.visible = true;
             }
             
+            // 将高斯泼溅模型添加到锚点下
+            if (gaussianGroup) {
+                scene.remove(gaussianGroup);
+                arAnchor.add(gaussianGroup);
+            }
+            
             // 隐藏标记
             reticle.visible = false;
             instructions.textContent = '点击管线查看详情信息';
@@ -1569,6 +1744,16 @@
             initThreeJS();
             initWebXR();
             initGPS();
+            
+            // 加载高斯泼溅模型（在位置初始化之后）
+            // 等待一小段时间，让位置信息先获取
+            setTimeout(async () => {
+                try {
+                    await loadGaussianSplat('models/splat.ply');
+                } catch (e) {
+                    console.error('加载高斯泼溅模型出错:', e);
+                }
+            }, 1000);
             
             // AR按钮点击事件
             arButton.addEventListener('click', startAR);
