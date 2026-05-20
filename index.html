@@ -508,15 +508,12 @@
 
     <!-- 引入Three.js和相关库 -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
-    <!-- 高斯泼溅3D渲染库 - 使用更可靠的CDN -->
-    <script src="https://unpkg.com/@mkkellogg/gaussian-splats-3d@0.4.6/build/gaussian-splats-3d.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mkkellogg/gaussian-splats-3d@0.1.18/dist/GaussianSplats3D.js"></script>
 
     <script>
         // ==================== 全局变量与配置 ====================
         let scene, camera, renderer;
         let currentLocation = null;
-        let initialLocation = null;  // 保存初始位置
         let currentAccuracy = null;
         let pipelineGroup = null;
         let xrSession = null;
@@ -529,11 +526,8 @@
         let pointer = new THREE.Vector2();
         let isARActive = false;
         let watchPositionId = null;
-        
-        // 高斯泼溅相关
-        let gaussianViewer = null;
-        let gaussianGroup = null;
-        let gaussianInfo = { hasGeoCoords: false, lat: 0, lng: 0 };
+        let dropInViewer = null;
+        let splatLoaded = false;
 
         // 校准参数
         let calibration = {
@@ -754,252 +748,6 @@
             }
         }
 
-        // ==================== 高斯泼溅加载模块 ====================
-        
-        /**
-         * 简单测试：先加载一个简单的glb模型作为替代方案
-         * 这样可以验证整个管道工作，然后再完善高斯泼溅
-         */
-        async function loadSimpleTestModel() {
-            try {
-                showOverlay('📦', '正在加载3D模型...', '请稍候...');
-                
-                // 先尝试加载现有的 oblique.glb 作为测试
-                try {
-                    const loader = new THREE.GLTFLoader();
-                    const glb = await loader.loadAsync('models/oblique.glb');
-                    
-                    if (gaussianGroup) {
-                        scene.remove(gaussianGroup);
-                    }
-                    gaussianGroup = new THREE.Group();
-                    gaussianGroup.add(glb.scene);
-                    
-                    // 添加到场景
-                    scene.add(gaussianGroup);
-                    
-                    // 对齐位置
-                    alignGaussianToLocation();
-                    
-                    overlay.classList.add('hidden');
-                    console.log('简单3D模型加载成功！');
-                    return true;
-                } catch (glbError) {
-                    console.warn('GLB模型加载失败，使用简单几何体:', glbError);
-                    createSimpleTestGeometry();
-                    return true;
-                }
-            } catch (e) {
-                console.error('加载简单模型失败，使用备用几何体:', e);
-                createSimpleTestGeometry();
-                return false;
-            }
-        }
-        
-        /**
-         * 创建最简单的测试几何体，确保一定能显示
-         */
-        function createSimpleTestGeometry() {
-            if (gaussianGroup) {
-                scene.remove(gaussianGroup);
-            }
-            
-            gaussianGroup = new THREE.Group();
-            
-            // 创建一个简单的盒子作为测试
-            const boxGeometry = new THREE.BoxGeometry(10, 5, 10);
-            const boxMaterial = new THREE.MeshPhongMaterial({ 
-                color: 0x00ff00,
-                transparent: true,
-                opacity: 0.8
-            });
-            const box = new THREE.Mesh(boxGeometry, boxMaterial);
-            box.position.y = 2.5; // 稍微向上一点
-            gaussianGroup.add(box);
-            
-            // 添加一个地面网格
-            const gridHelper = new THREE.GridHelper(50, 50, 0x444444, 0x222222);
-            gaussianGroup.add(gridHelper);
-            
-            scene.add(gaussianGroup);
-            
-            alignGaussianToLocation();
-            overlay.classList.add('hidden');
-            console.log('创建测试几何体成功');
-        }
-        
-        /**
-         * 解析 PLY 文件头部，检查是否包含经纬度信息
-         */
-        async function parsePLYHeaderForCoords(url) {
-            try {
-                const response = await fetch(url);
-                if (!response.ok) {
-                    throw new Error(`无法加载文件: ${response.status}`);
-                }
-                
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder('utf-8');
-                let headerText = '';
-                let done = false;
-                const maxHeaderSize = 10000; // 限制头部大小
-                
-                while (!done && headerText.length < maxHeaderSize) {
-                    const { value, done: streamDone } = await reader.read();
-                    done = streamDone;
-                    
-                    if (value) {
-                        headerText += decoder.decode(value, { stream: !done });
-                        
-                        if (headerText.includes('end_header')) {
-                            break;
-                        }
-                    }
-                }
-                
-                reader.cancel();
-                
-                // 检查常见的经纬度属性名
-                const latNames = ['lat', 'latitude', 'lon', 'longitude'];
-                let hasGeoCoords = false;
-                
-                const lines = headerText.split('\n');
-                for (const line of lines) {
-                    if (line.toLowerCase().includes('property')) {
-                        for (const name of latNames) {
-                            if (line.toLowerCase().includes(name)) {
-                                hasGeoCoords = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (line.trim() === 'end_header') break;
-                }
-                
-                return {
-                    hasGeoCoords: hasGeoCoords,
-                    lat: 0,
-                    lng: 0,
-                    headerText: headerText.substring(0, 500)
-                };
-            } catch (e) {
-                console.warn('解析PLY头部出错:', e);
-                return { hasGeoCoords: false, lat: 0, lng: 0, headerText: '' };
-            }
-        }
-        
-        /**
-         * 加载高斯泼溅模型 - 带备用方案
-         */
-        async function loadGaussianSplat(url) {
-            try {
-                // 先检查库是否加载成功
-                if (typeof GaussianSplats3D === 'undefined') {
-                    console.warn('高斯泼溅库未加载，使用备用方案');
-                    await loadSimpleTestModel();
-                    return;
-                }
-                
-                showOverlay('📦', '正在加载高斯泼溅模型', '请稍候...');
-                
-                // 先解析PLY头部
-                gaussianInfo = await parsePLYHeaderForCoords(url);
-                console.log('高斯泼溅模型信息:', gaussianInfo);
-                
-                // 创建高斯泼溅组
-                if (gaussianGroup) {
-                    scene.remove(gaussianGroup);
-                }
-                gaussianGroup = new THREE.Group();
-                
-                // 使用Viewer方式
-                const viewer = new GaussianSplats3D.Viewer({
-                    selfDrivenMode: false,
-                    sharedMemoryForWorkers: false,
-                    ignoreDevicePixelRatio: true,
-                    useBuiltInControls: false,
-                });
-                
-                await viewer.addSplatScene(url, {
-                    splatAlphaRemovalThreshold: 5,
-                    showLoadingUI: false,
-                    position: [0, 0, 0],
-                    rotation: [0, 0, 0, 1],
-                    scale: [1, 1, 1],
-                });
-                
-                // 将Viewer的渲染集成到我们的循环中
-                gaussianViewer = viewer;
-                
-                // 尝试添加到场景中
-                if (viewer.scene) {
-                    gaussianGroup.add(viewer.scene);
-                }
-                
-                // 添加到主场景
-                scene.add(gaussianGroup);
-                
-                // 位置对齐
-                alignGaussianToLocation();
-                
-                overlay.classList.add('hidden');
-                console.log('高斯泼溅模型加载成功');
-                
-            } catch (error) {
-                console.error('加载高斯泼溅模型失败:', error);
-                console.log('尝试使用备用方案...');
-                
-                // 失败时使用备用方案
-                await loadSimpleTestModel();
-            }
-        }
-        
-        /**
-         * 对齐高斯泼溅模型到正确的GPS位置
-         */
-        function alignGaussianToLocation() {
-            if (!gaussianGroup) return;
-            
-            // 确定使用哪个位置
-            let targetLat, targetLng;
-            
-            if (gaussianInfo.hasGeoCoords && gaussianInfo.lat !== 0 && gaussianInfo.lng !== 0) {
-                // 使用模型自带的经纬度
-                targetLat = gaussianInfo.lat;
-                targetLng = gaussianInfo.lng;
-                console.log('使用模型自带经纬度:', targetLat, targetLng);
-            } else if (initialLocation) {
-                // 使用初始位置
-                targetLat = initialLocation.lat;
-                targetLng = initialLocation.lng;
-                console.log('使用初始位置:', targetLat, targetLng);
-            } else if (currentLocation) {
-                // 使用当前位置
-                targetLat = currentLocation.lat;
-                targetLng = currentLocation.lng;
-                console.log('使用当前位置:', targetLat, targetLng);
-            } else {
-                console.warn('没有可用的位置信息');
-                return;
-            }
-            
-            // 计算相对于当前位置的世界坐标
-            const originLat = currentLocation ? currentLocation.lat : targetLat;
-            const originLng = currentLocation ? currentLocation.lng : targetLng;
-            
-            const worldPos = geoToWorld(targetLat, targetLng, originLat, originLng);
-            
-            // 设置高斯泼溅模型位置
-            // 注意：可能需要根据模型实际尺寸进行调整
-            gaussianGroup.position.set(worldPos.x, 0, worldPos.z);
-            
-            // 如果有锚点，移动到锚点下
-            if (arAnchor) {
-                scene.remove(gaussianGroup);
-                arAnchor.add(gaussianGroup);
-            }
-        }
-
         // ==================== DOM元素获取 ====================
         const locationBar = document.getElementById('location-bar');
         const latEl = document.getElementById('lat');
@@ -1089,12 +837,6 @@
                 lng: position.coords.longitude
             };
             currentAccuracy = position.coords.accuracy;
-            
-            // 保存初始位置
-            if (!initialLocation) {
-                initialLocation = { ...currentLocation };
-                console.log('初始位置已保存:', initialLocation);
-            }
             
             updateLocationDisplay(currentLocation);
             updateAccuracyDisplay(currentAccuracy);
@@ -1715,6 +1457,17 @@
             arButton.disabled = false;
             instructions.style.display = 'none';
             pipelineGroup.visible = false;
+            
+            // 清理高斯泼溅模型
+            if (dropInViewer) {
+                if (arAnchor) {
+                    arAnchor.remove(dropInViewer);
+                }
+                dropInViewer.dispose();
+                dropInViewer = null;
+            }
+            splatLoaded = false;
+            
             if (arAnchor) {
                 scene.remove(arAnchor);
                 arAnchor = null;
@@ -1761,11 +1514,6 @@
                 }
             }
             
-            // 渲染高斯泼溅模型（如果加载了）
-            if (gaussianViewer && gaussianViewer.render) {
-                gaussianViewer.render(timestamp);
-            }
-            
             renderer.render(scene, camera);
         }
 
@@ -1785,15 +1533,42 @@
                 pipelineGroup.visible = true;
             }
             
-            // 将高斯泼溅模型添加到锚点下
-            if (gaussianGroup) {
-                scene.remove(gaussianGroup);
-                arAnchor.add(gaussianGroup);
-            }
+            // 加载高斯泼溅模型
+            loadGaussianSplat();
             
             // 隐藏标记
             reticle.visible = false;
             instructions.textContent = '点击管线查看详情信息';
+        }
+        
+        async function loadGaussianSplat() {
+            if (splatLoaded || !arAnchor) return;
+            
+            try {
+                dropInViewer = new GaussianSplats3D.DropInViewer({
+                    gpuAcceleratedSort: false,
+                    integerBasedSort: false,
+                    selfDrivenMode: false,
+                    renderer: renderer,
+                    camera: camera,
+                    sharedMemoryForWorkers: false
+                });
+                
+                arAnchor.add(dropInViewer);
+                
+                const loadPromise = dropInViewer.addSplatScene('models/splat.ply', {
+                    position: [0, 0.5, 0],
+                    scale: [1, 1, 1],
+                    showLoadingUI: false,
+                    splatAlphaRemovalThreshold: 20
+                });
+                
+                await loadPromise;
+                splatLoaded = true;
+                console.log('高斯泼溅模型加载成功');
+            } catch (error) {
+                console.error('加载高斯泼溅模型失败:', error);
+            }
         }
 
         // ==================== 主初始化函数 ====================
@@ -1807,20 +1582,6 @@
             initThreeJS();
             initWebXR();
             initGPS();
-            
-            // 加载高斯泼溅模型（在位置初始化之后）
-            // 等待更长时间，让位置信息和库都加载好
-            setTimeout(async () => {
-                console.log('开始尝试加载模型...');
-                console.log('GaussianSplats3D 库是否加载:', typeof GaussianSplats3D !== 'undefined');
-                
-                try {
-                    await loadGaussianSplat('models/splat.ply');
-                } catch (e) {
-                    console.error('加载模型出错:', e);
-                    createSimpleTestGeometry();
-                }
-            }, 2000);
             
             // AR按钮点击事件
             arButton.addEventListener('click', startAR);
