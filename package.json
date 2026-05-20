@@ -8,9 +8,16 @@
     "dev-ssl": "npx serve . -l 8443 --ssl-cert localhost.pem --ssl-key localhost-key.pem",
     "build": "echo '纯前端项目，无需构建，直接部署index.html即可'"
   },
-  "keywords": ["webar", "threejs", "webxr", "gps", "pipeline"],
+  "keywords": [
+    "webar",
+    "threejs",
+    "webxr",
+    "gps",
+    "pipeline"
+  ],
   "author": "",
   "license": "MIT",
-  "devDependencies": {},
-  "dependencies": {}
+  "dependencies": {
+    "@mkkellogg/gaussian-splats-3d": "^0.4.7"
+  }
 }

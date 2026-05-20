@@ -438,6 +438,9 @@
     <!-- 启动AR按钮 -->
     <button id="ar-button" disabled>启动AR</button>
     
+    <!-- 桌面测试按钮 -->
+    <button id="desktop-test-btn" style="position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(50px); z-index: 1000; padding: 12px 24px; font-size: 14px; font-weight: 600; color: #fff; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; border-radius: 30px; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); transition: all 0.3s ease;">桌面测试模式</button>
+    
     <!-- Three.js Canvas容器 -->
     <div id="canvas-container"></div>
     
@@ -507,8 +510,9 @@
     </div>
 
     <!-- 引入Three.js和相关库 -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mkkellogg/gaussian-splats-3d@0.1.18/dist/GaussianSplats3D.js"></script>
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script src="node_modules/@mkkellogg/gaussian-splats-3d/build/gaussian-splats-3d.umd.cjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js"></script>
 
     <script>
         // ==================== 全局变量与配置 ====================
@@ -528,6 +532,8 @@
         let watchPositionId = null;
         let dropInViewer = null;
         let splatLoaded = false;
+        let controls = null;
+        let isDesktopMode = false;
 
         // 校准参数
         let calibration = {
@@ -774,6 +780,11 @@
         const MIN_ACCEPTABLE_ACCURACY = 20; // 最小可接受精度（米）
         
         function initGPS() {
+            if (isDesktopMode) {
+                // 桌面测试模式下跳过GPS定位
+                return;
+            }
+            
             if (!navigator.geolocation) {
                 showOverlay('❌', '设备不支持定位', '请使用支持GPS定位的移动设备');
                 return;
@@ -901,6 +912,11 @@
         }
 
         function handleLocationError(error) {
+            if (isDesktopMode) {
+                // 桌面测试模式下不显示定位失败消息
+                return;
+            }
+            
             let message = '';
             switch (error.code) {
                 case error.PERMISSION_DENIED:
@@ -1375,7 +1391,7 @@
 
         // ==================== 射线拾取（点击管线） ====================
         function onPointerDown(event) {
-            if (!isARActive) return;
+            if (!isARActive && !isDesktopMode) return;
             
             // 计算指针位置
             const rect = renderer.domElement.getBoundingClientRect();
@@ -1534,17 +1550,24 @@
             }
             
             // 加载高斯泼溅模型
-            loadGaussianSplat();
+            loadGaussianSplat(arAnchor);
             
             // 隐藏标记
             reticle.visible = false;
             instructions.textContent = '点击管线查看详情信息';
         }
         
-        async function loadGaussianSplat() {
-            if (splatLoaded || !arAnchor) return;
+        async function loadGaussianSplat(parentGroup) {
+            if (splatLoaded) return;
             
             try {
+                const GaussianSplats3D = window['Gaussian Splats 3D'];
+                if (typeof GaussianSplats3D === 'undefined') {
+                    console.warn('高斯泼溅库未加载，跳过高斯泼溅模型');
+                    showTemporaryMessage('高斯泼溅库加载失败，模型不可用');
+                    return;
+                }
+                
                 dropInViewer = new GaussianSplats3D.DropInViewer({
                     gpuAcceleratedSort: false,
                     integerBasedSort: false,
@@ -1554,23 +1577,179 @@
                     sharedMemoryForWorkers: false
                 });
                 
-                arAnchor.add(dropInViewer);
+                parentGroup.add(dropInViewer);
                 
                 const loadPromise = dropInViewer.addSplatScene('models/splat.ply', {
-                    position: [0, 0.5, 0],
-                    scale: [1, 1, 1],
+                    position: [0, -1, 0],  // 提高位置
+                    scale: [1, 1, 1],  // 增大尺寸
                     showLoadingUI: false,
-                    splatAlphaRemovalThreshold: 20
+                    splatAlphaRemovalThreshold: 5
                 });
                 
                 await loadPromise;
+                
+                // 加载完成后调整模型方向（修复倒立问题）
+                dropInViewer.rotation.x = -Math.PI;  
+                
+                // 调整相机位置以适应模型大小
+                camera.position.set(8, 6, 8);
+                camera.lookAt(0, 1, 0);
+                
                 splatLoaded = true;
                 console.log('高斯泼溅模型加载成功');
             } catch (error) {
                 console.error('加载高斯泼溅模型失败:', error);
+                showTemporaryMessage('高斯泼溅模型加载失败: ' + error.message);
             }
         }
 
+        // ==================== 自定义轨道控制 ====================
+        function createOrbitControls(camera, domElement) {
+            const controls = {
+                target: new THREE.Vector3(0, 0, 0),
+                distance: 10,
+                theta: Math.PI / 4,
+                phi: Math.PI / 4,
+                enabled: true,
+                rotateSpeed: 0.005,
+                zoomSpeed: 0.01,
+                minDistance: 1,
+                maxDistance: 100,
+                minPolarAngle: 0,
+                maxPolarAngle: Math.PI / 2,
+                update: function() {
+                    camera.position.x = this.target.x + this.distance * Math.sin(this.phi) * Math.cos(this.theta);
+                    camera.position.y = this.target.y + this.distance * Math.cos(this.phi);
+                    camera.position.z = this.target.z + this.distance * Math.sin(this.phi) * Math.sin(this.theta);
+                    camera.lookAt(this.target);
+                }
+            };
+            
+            let isDragging = false;
+            let previousMousePosition = { x: 0, y: 0 };
+            
+            domElement.addEventListener('mousedown', function(e) {
+                if (!controls.enabled) return;
+                isDragging = true;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            });
+            
+            domElement.addEventListener('mousemove', function(e) {
+                if (!controls.enabled || !isDragging) return;
+                
+                const deltaX = e.clientX - previousMousePosition.x;
+                const deltaY = e.clientY - previousMousePosition.y;
+                
+                controls.theta -= deltaX * controls.rotateSpeed;
+                controls.phi += deltaY * controls.rotateSpeed;
+                
+                controls.phi = Math.max(controls.minPolarAngle, Math.min(controls.maxPolarAngle, controls.phi));
+                
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            });
+            
+            domElement.addEventListener('mouseup', function() {
+                isDragging = false;
+            });
+            
+            domElement.addEventListener('mouseleave', function() {
+                isDragging = false;
+            });
+            
+            domElement.addEventListener('wheel', function(e) {
+                if (!controls.enabled) return;
+                e.preventDefault();
+                
+                controls.distance += e.deltaY * controls.zoomSpeed * controls.distance;
+                controls.distance = Math.max(controls.minDistance, Math.min(controls.maxDistance, controls.distance));
+            });
+            
+            return controls;
+        }
+        
+        // ==================== 桌面测试模式 ====================
+        function startDesktopTest() {
+            isDesktopMode = true;
+            
+            // 设置默认定位
+            currentLocation = {
+                lat: 27.967431,
+                lng: 120.667297
+            };
+            currentAccuracy = 5;
+            
+            // 更新显示
+            updateLocationDisplay(currentLocation);
+            updateAccuracyDisplay(currentAccuracy);
+            locationStatus.textContent = '桌面测试模式 ✓';
+            locationStatus.style.color = '#4ade80';
+            
+            // 停止GPS定位监听（如果正在进行）
+            if (watchPositionId) {
+                navigator.geolocation.clearWatch(watchPositionId);
+                watchPositionId = null;
+            }
+            
+            // 隐藏遮罩和按钮
+            overlay.classList.add('hidden');
+            arButton.style.display = 'none';
+            document.getElementById('desktop-test-btn').style.display = 'none';
+            
+            // 启用鼠标控制
+            controls = createOrbitControls(camera, renderer.domElement);
+            
+            // 创建网格地面
+            createGridFloor();
+            
+            // 设置相机位置（更远一些，确保能看到完整模型）
+            camera.position.set(10, 10, 10);
+            camera.lookAt(0, 0, 0);
+            
+            // 生成管线数据
+            generatePipelineData();
+            
+            // 创建管线
+            createPipelines();
+            pipelineGroup.visible = true;
+            
+            // 加载高斯泼溅模型
+            loadGaussianSplat(scene);
+            
+            // 开始渲染循环
+            renderer.setAnimationLoop(desktopRender);
+            
+            // 更新操作指引
+            instructions.textContent = '使用鼠标旋转视角，滚轮缩放';
+            instructions.style.display = 'block';
+        }
+        
+        function createGridFloor() {
+            // 创建网格地面
+            const gridHelper = new THREE.GridHelper(50, 100, 0x4ade80, 0x374151);
+            gridHelper.position.y = -0.01;
+            scene.add(gridHelper);
+            
+            // 创建地面平面（完全透明，不遮挡模型）
+            const groundGeometry = new THREE.PlaneGeometry(50, 50);
+            const groundMaterial = new THREE.MeshPhongMaterial({
+                color: 0x1f2937,
+                transparent: true,
+                opacity: 0,  // 完全透明
+                side: THREE.DoubleSide
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.02;
+            scene.add(ground);
+        }
+        
+        function desktopRender() {
+            if (controls) {
+                controls.update();
+            }
+            renderer.render(scene, camera);
+        }
+        
         // ==================== 主初始化函数 ====================
         async function init() {
             // 加载保存的校准参数
@@ -1670,6 +1849,9 @@
             });
             document.getElementById('save-calibration').addEventListener('click', saveCalibration);
             document.getElementById('reset-calibration').addEventListener('click', resetCalibration);
+            
+            // 桌面测试按钮事件
+            document.getElementById('desktop-test-btn').addEventListener('click', startDesktopTest);
         }
 
         // 启动应用
