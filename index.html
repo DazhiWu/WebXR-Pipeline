@@ -384,6 +384,229 @@
             padding: 0 20px;
             text-shadow: 0 2px 4px rgba(0,0,0,0.5);
         }
+
+        /* 模块选择界面 */
+        #module-select-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1010;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        #module-select-overlay.hidden {
+            display: none;
+        }
+
+        #module-select-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        #module-select-subtitle {
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .module-card {
+            width: 100%;
+            max-width: 300px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 24px;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .module-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        }
+
+        .module-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        .module-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .module-desc {
+            font-size: 13px;
+            color: #aaa;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        /* PLY子功能选择界面 */
+        #ply-submenu-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1011;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        #ply-submenu-overlay.hidden {
+            display: none;
+        }
+
+        #ply-back-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        #ply-back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* 模型选择界面 */
+        #model-select-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1012;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 20px;
+        }
+
+        #model-select-overlay.hidden {
+            display: none;
+        }
+
+        #model-select-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 20px;
+        }
+
+        #model-list {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .model-item {
+            width: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .model-item:hover {
+            transform: scale(1.05);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .model-item.selected {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.2);
+        }
+
+        .model-icon {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .model-name {
+            font-size: 13px;
+            color: #fff;
+            word-break: break-word;
+        }
+
+        #model-select-btn {
+            padding: 14px 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 30px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        #model-select-btn:hover {
+            transform: scale(1.05);
+        }
+
+        /* 模型切换按钮 */
+        #model-switch-btn {
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            z-index: 1000;
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border: none;
+            border-radius: 25px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+            transition: all 0.3s ease;
+            display: none;
+        }
+
+        #model-switch-btn.show {
+            display: block;
+        }
+
+        #model-switch-btn:hover {
+            transform: scale(1.05);
+        }
     </style>
 </head>
 <body>
@@ -438,8 +661,8 @@
     <!-- 启动AR按钮 -->
     <button id="ar-button" disabled>启动AR</button>
     
-    <!-- 桌面测试按钮 -->
-    <button id="desktop-test-btn" style="position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(50px); z-index: 1000; padding: 12px 24px; font-size: 14px; font-weight: 600; color: #fff; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; border-radius: 30px; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); transition: all 0.3s ease;">桌面测试模式</button>
+    <!-- 桌面测试按钮（隐藏，通过模块选择进入） -->
+    <button id="desktop-test-btn" style="display: none; position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(50px); z-index: 1000; padding: 12px 24px; font-size: 14px; font-weight: 600; color: #fff; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; border-radius: 30px; cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); transition: all 0.3s ease;">桌面测试模式</button>
     
     <!-- Three.js Canvas容器 -->
     <div id="canvas-container"></div>
@@ -509,6 +732,67 @@
         </div>
     </div>
 
+    <!-- 模块选择界面 -->
+    <div id="module-select-overlay">
+        <div id="module-select-title">🔮 WebXR 地下管网</div>
+        <div id="module-select-subtitle">请选择要使用的功能模块</div>
+        
+        <div class="module-card" id="ply-module-card">
+            <div class="module-icon">📦</div>
+            <div class="module-name">PLY文件加载</div>
+            <div class="module-desc">加载和展示PLY格式的3D模型，支持AR和桌面测试模式</div>
+        </div>
+        
+        <div class="module-card" id="pipeline-module-card">
+            <div class="module-icon">🛠️</div>
+            <div class="module-name">AR管道</div>
+            <div class="module-desc">基于真实地理位置的地下管网AR可视化</div>
+        </div>
+    </div>
+
+    <!-- PLY子功能选择界面 -->
+    <div id="ply-submenu-overlay" class="hidden">
+        <button id="ply-back-btn">← 返回</button>
+        
+        <div id="module-select-title">📦 PLY文件加载</div>
+        <div id="module-select-subtitle">请选择运行模式</div>
+        
+        <div class="module-card" id="ply-ar-mode">
+            <div class="module-icon">📱</div>
+            <div class="module-name">AR模型加载</div>
+            <div class="module-desc">使用手机摄像头进行AR模型展示</div>
+        </div>
+        
+        <div class="module-card" id="ply-desktop-mode">
+            <div class="module-icon">🖥️</div>
+            <div class="module-name">桌面测试模式</div>
+            <div class="module-desc">在桌面端测试3D模型渲染</div>
+        </div>
+    </div>
+
+    <!-- 模型选择界面 -->
+    <div id="model-select-overlay" class="hidden">
+        <div id="model-select-title">选择模型</div>
+        <div id="model-list">
+            <div class="model-item" data-model="models/splat.ply">
+                <div class="model-icon">🎲</div>
+                <div class="model-name">splat.ply</div>
+            </div>
+            <div class="model-item" data-model="models/splat2.ply">
+                <div class="model-icon">🎯</div>
+                <div class="model-name">splat2.ply</div>
+            </div>
+            <div class="model-item" data-model="models/客厅.ply">
+                <div class="model-icon">🏠</div>
+                <div class="model-name">客厅.ply</div>
+            </div>
+        </div>
+        <button id="model-select-btn">加载模型</button>
+    </div>
+
+    <!-- 模型切换按钮 -->
+    <button id="model-switch-btn">切换模型</button>
+
     <!-- 引入Three.js和相关库 -->
     <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
     <script src="libs/gaussian-splats-3d.umd.cjs"></script>
@@ -534,6 +818,12 @@
         let splatLoaded = false;
         let controls = null;
         let isDesktopMode = false;
+        
+        // PLY模型加载相关变量
+        let currentModule = null;  // 当前选择的模块: 'ply' 或 'pipeline'
+        let selectedModelPath = null;  // 当前选中的模型路径
+        let isPlyMode = false;  // 是否处于PLY加载模式
+        let groundDetected = false;  // 是否已检测到地面
 
         // 校准参数
         let calibration = {
@@ -773,6 +1063,19 @@
         const instructions = document.getElementById('instructions');
         const pipelineModal = document.getElementById('pipeline-modal');
         const modalClose = document.getElementById('modal-close');
+        
+        // 模块选择相关元素
+        const moduleSelectOverlay = document.getElementById('module-select-overlay');
+        const plyModuleCard = document.getElementById('ply-module-card');
+        const pipelineModuleCard = document.getElementById('pipeline-module-card');
+        const plySubmenuOverlay = document.getElementById('ply-submenu-overlay');
+        const plyBackBtn = document.getElementById('ply-back-btn');
+        const plyArMode = document.getElementById('ply-ar-mode');
+        const plyDesktopMode = document.getElementById('ply-desktop-mode');
+        const modelSelectOverlay = document.getElementById('model-select-overlay');
+        const modelList = document.getElementById('model-list');
+        const modelSelectBtn = document.getElementById('model-select-btn');
+        const modelSwitchBtn = document.getElementById('model-switch-btn');
 
         // ==================== GPS定位模块 ====================
         let locationAttempts = 0;
@@ -1540,21 +1843,29 @@
             arAnchor.matrixAutoUpdate = false;
             scene.add(arAnchor);
             
-            // 创建管网
-            createPipelines();
-            
-            // 将管网添加到锚点下
-            if (pipelineGroup) {
-                arAnchor.add(pipelineGroup);
-                pipelineGroup.visible = true;
+            if (isPlyMode) {
+                // PLY模式：显示模型切换按钮，等待用户选择模型
+                modelSwitchBtn.classList.add('show');
+                instructions.textContent = '扫描地面，点击下方按钮选择模型';
+                groundDetected = true;
+                // 显示模型选择界面
+                modelSelectOverlay.classList.remove('hidden');
+            } else {
+                // AR管道模式：创建管网
+                createPipelines();
+                
+                // 将管网添加到锚点下
+                if (pipelineGroup) {
+                    arAnchor.add(pipelineGroup);
+                    pipelineGroup.visible = true;
+                }
+                
+                // 隐藏标记
+                instructions.textContent = '点击管线查看详情信息';
             }
-            
-            // 加载高斯泼溅模型
-            loadGaussianSplat(arAnchor);
             
             // 隐藏标记
             reticle.visible = false;
-            instructions.textContent = '点击管线查看详情信息';
         }
         
         async function loadGaussianSplat(parentGroup) {
@@ -1705,22 +2016,27 @@
             camera.position.set(10, 10, 10);
             camera.lookAt(0, 0, 0);
             
-            // 生成管线数据
-            generatePipelineData();
-            
-            // 创建管线
-            createPipelines();
-            pipelineGroup.visible = true;
-            
-            // 加载高斯泼溅模型
-            loadGaussianSplat(scene);
+            if (isPlyMode) {
+                // PLY模式：显示模型选择界面
+                modelSwitchBtn.classList.add('show');
+                instructions.textContent = '点击下方按钮选择模型，使用鼠标旋转视角';
+                instructions.style.display = 'block';
+                modelSelectOverlay.classList.remove('hidden');
+            } else {
+                // AR管道模式：生成管线数据
+                generatePipelineData();
+                
+                // 创建管线
+                createPipelines();
+                pipelineGroup.visible = true;
+                
+                // 更新操作指引
+                instructions.textContent = '使用鼠标旋转视角，滚轮缩放';
+                instructions.style.display = 'block';
+            }
             
             // 开始渲染循环
             renderer.setAnimationLoop(desktopRender);
-            
-            // 更新操作指引
-            instructions.textContent = '使用鼠标旋转视角，滚轮缩放';
-            instructions.style.display = 'block';
         }
         
         function createGridFloor() {
@@ -1750,6 +2066,167 @@
             renderer.render(scene, camera);
         }
         
+        // ==================== PLY模型加载功能 ====================
+        async function loadPlyModel(modelPath, parentGroup) {
+            console.log('开始加载模型:', modelPath);
+            if (dropInViewer) {
+                console.log('移除旧模型');
+                // 移除旧模型
+                if (arAnchor) {
+                    arAnchor.remove(dropInViewer);
+                } else {
+                    scene.remove(dropInViewer);
+                }
+                dropInViewer.dispose();
+                dropInViewer = null;
+            }
+            
+            try {
+                const GaussianSplats3D = window['Gaussian Splats 3D'];
+                if (typeof GaussianSplats3D === 'undefined') {
+                    console.warn('高斯泼溅库未加载');
+                    showTemporaryMessage('高斯泼溅库加载失败');
+                    return;
+                }
+                
+                console.log('创建DropInViewer');
+                dropInViewer = new GaussianSplats3D.DropInViewer({
+                    gpuAcceleratedSort: false,
+                    integerBasedSort: false,
+                    selfDrivenMode: true,  // 改为 true，让它自己驱动
+                    renderer: renderer,
+                    camera: camera,
+                    sharedMemoryForWorkers: false
+                });
+                
+                console.log('将DropInViewer添加到场景');
+                parentGroup.add(dropInViewer);
+                
+                console.log('开始加载splat场景:', modelPath);
+                const loadPromise = dropInViewer.addSplatScene(modelPath, {
+                    position: [0, -1, 0],  // 提高位置，与原来保持一致
+                    scale: [1, 1, 1],
+                    showLoadingUI: false,
+                    splatAlphaRemovalThreshold: 5
+                });
+                
+                await loadPromise;
+                console.log('splat场景加载完成');
+                
+                // 加载完成后调整模型方向（修复倒立问题）
+                dropInViewer.rotation.x = -Math.PI;
+                
+                splatLoaded = true;
+                selectedModelPath = modelPath;
+                console.log('模型加载成功:', modelPath);
+                showTemporaryMessage('模型加载成功');
+            } catch (error) {
+                console.error('加载模型失败:', error);
+                showTemporaryMessage('模型加载失败: ' + error.message);
+            }
+        }
+
+        function openModelSelect() {
+            modelSelectOverlay.classList.remove('hidden');
+            // 清除之前的选择
+            document.querySelectorAll('.model-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            // 高亮当前选中的模型
+            if (selectedModelPath) {
+                const selectedItem = document.querySelector(`[data-model="${selectedModelPath}"]`);
+                if (selectedItem) {
+                    selectedItem.classList.add('selected');
+                }
+            }
+        }
+
+        function selectModel(event) {
+            // 清除之前的选择
+            document.querySelectorAll('.model-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            // 选中当前项
+            event.currentTarget.classList.add('selected');
+            selectedModelPath = event.currentTarget.dataset.model;
+        }
+
+        async function confirmModelSelection() {
+            console.log('confirmModelSelection 被调用，selectedModelPath:', selectedModelPath);
+            if (!selectedModelPath) {
+                showTemporaryMessage('请先选择一个模型');
+                return;
+            }
+            
+            modelSelectOverlay.classList.add('hidden');
+            
+            let parentGroup = scene;
+            if (arAnchor) {
+                parentGroup = arAnchor;
+            }
+            
+            console.log('准备加载模型，parentGroup:', parentGroup);
+            await loadPlyModel(selectedModelPath, parentGroup);
+            
+            if (isDesktopMode && controls) {
+                camera.position.set(8, 6, 8);
+                camera.lookAt(0, 1, 0);
+            }
+        }
+
+        // ==================== 模块选择功能 ====================
+        function selectModule(module) {
+            currentModule = module;
+            
+            if (module === 'ply') {
+                // 显示PLY子菜单
+                moduleSelectOverlay.classList.add('hidden');
+                plySubmenuOverlay.classList.remove('hidden');
+            } else if (module === 'pipeline') {
+                // AR管道模式
+                isPlyMode = false;
+                moduleSelectOverlay.classList.add('hidden');
+                locationBar.style.display = 'flex';
+                
+                // 初始化GPS和WebXR
+                initGPS();
+                initWebXR();
+                
+                // 隐藏遮罩显示AR按钮
+                overlay.classList.remove('hidden');
+                overlayIcon.textContent = '📍';
+                overlayTitle.textContent = '正在获取位置信息';
+                overlayText.textContent = '请允许浏览器获取您的位置权限';
+            }
+        }
+
+        function selectPlyMode(mode) {
+            isPlyMode = true;
+            plySubmenuOverlay.classList.add('hidden');
+            locationBar.style.display = 'none';
+            
+            if (mode === 'ar') {
+                // AR模式
+                if (!navigator.xr) {
+                    showOverlay('❌', '设备不支持WebXR', '请使用支持WebXR的浏览器');
+                    return;
+                }
+                
+                navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+                    if (!supported) {
+                        showOverlay('❌', '设备不支持AR模式', '请使用支持ARCore/ARKit的设备');
+                        return;
+                    }
+                    
+                    // 启动AR
+                    startAR();
+                });
+            } else if (mode === 'desktop') {
+                // 桌面测试模式（Three.js已在init中初始化）
+                startDesktopTest();
+            }
+        }
+
         // ==================== 主初始化函数 ====================
         async function init() {
             // 加载保存的校准参数
@@ -1758,9 +2235,71 @@
             // 先加载管线数据
             await loadPipelineData();
             
-            initThreeJS();
-            initWebXR();
-            initGPS();
+            // 初始化Three.js（隐藏，等待模块选择）
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+            
+            pipelineGroup = new THREE.Group();
+            scene.add(pipelineGroup);
+            createReticle();
+            
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('touchstart', onPointerDown);
+            renderer.domElement.addEventListener('click', onPointerDown);
+            
+            modalClose.addEventListener('click', () => {
+                pipelineModal.classList.remove('show');
+            });
+            
+            pipelineModal.addEventListener('click', (e) => {
+                if (e.target === pipelineModal) {
+                    pipelineModal.classList.remove('show');
+                }
+            });
+            
+            // 模块选择事件
+            plyModuleCard.addEventListener('click', () => selectModule('ply'));
+            pipelineModuleCard.addEventListener('click', () => selectModule('pipeline'));
+            plyBackBtn.addEventListener('click', () => {
+                plySubmenuOverlay.classList.add('hidden');
+                moduleSelectOverlay.classList.remove('hidden');
+            });
+            plyArMode.addEventListener('click', () => selectPlyMode('ar'));
+            plyDesktopMode.addEventListener('click', () => selectPlyMode('desktop'));
+            
+            // 模型选择事件 - 直接给每个model-item添加事件监听器
+            document.querySelectorAll('.model-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    // 清除之前的选择
+                    document.querySelectorAll('.model-item').forEach(i => {
+                        i.classList.remove('selected');
+                    });
+                    // 选中当前项
+                    item.classList.add('selected');
+                    selectedModelPath = item.dataset.model;
+                    console.log('选择了模型:', selectedModelPath);
+                });
+            });
+            modelSelectBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                confirmModelSelection();
+            });
+            modelSwitchBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openModelSelect();
+            });
             
             // AR按钮点击事件
             arButton.addEventListener('click', startAR);
@@ -1774,7 +2313,6 @@
                 console.log('切换数据坐标系为:', e.target.value);
                 if (currentLocation) {
                     generatePipelineData();
-                    // 如果AR已启动，更新管线位置
                     if (arAnchor && pipelineGroup) {
                         updatePipelinePosition();
                     }
@@ -1788,7 +2326,6 @@
             calibrationToggle.addEventListener('click', toggleCalibrationPanel);
 
             // 校准控制
-            // 旋转按钮
             document.getElementById('cal-rotate-ccw').addEventListener('click', () => {
                 calibration.rotationY -= calibration.rotationStep;
                 updateCalibrationDisplay();
@@ -1849,9 +2386,6 @@
             });
             document.getElementById('save-calibration').addEventListener('click', saveCalibration);
             document.getElementById('reset-calibration').addEventListener('click', resetCalibration);
-            
-            // 桌面测试按钮事件
-            document.getElementById('desktop-test-btn').addEventListener('click', startDesktopTest);
         }
 
         // 启动应用
