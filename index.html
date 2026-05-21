@@ -1760,6 +1760,9 @@
                 arButton.style.display = 'none';
                 instructions.style.display = 'block';
                 
+                // 隐藏加载遮罩
+                overlay.classList.add('hidden');
+                
                 // 开始渲染循环
                 renderer.setAnimationLoop(render);
                 
@@ -2211,6 +2214,12 @@
                     showOverlay('❌', '设备不支持WebXR', '请使用支持WebXR的浏览器');
                     return;
                 }
+                
+                // 显示加载遮罩
+                overlay.classList.remove('hidden');
+                overlayIcon.textContent = '📱';
+                overlayTitle.textContent = '正在准备AR环境...';
+                overlayText.textContent = '请允许浏览器获取相机权限';
                 
                 navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
                     if (!supported) {
