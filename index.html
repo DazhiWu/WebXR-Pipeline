@@ -2082,6 +2082,10 @@
         // ==================== PLY模型加载功能 ====================
         async function loadPlyModel(modelPath, parentGroup) {
             console.log('开始加载模型:', modelPath);
+            
+            // 显示加载进度提示
+            showLoadingOverlay('正在加载模型...', '请稍候，大模型可能需要几秒钟');
+            
             if (dropInViewer) {
                 console.log('移除旧模型');
                 // 移除旧模型
@@ -2099,17 +2103,20 @@
                 if (typeof GaussianSplats3D === 'undefined') {
                     console.warn('高斯泼溅库未加载');
                     showTemporaryMessage('高斯泼溅库加载失败');
+                    hideLoadingOverlay();
                     return;
                 }
                 
                 console.log('创建DropInViewer');
                 dropInViewer = new GaussianSplats3D.DropInViewer({
-                    gpuAcceleratedSort: false,
-                    integerBasedSort: false,
-                    selfDrivenMode: true,  // 改为 true，让它自己驱动
+                    gpuAcceleratedSort: true,      // 启用GPU加速排序，大幅提升性能
+                    integerBasedSort: true,        // 启用整数排序，减少内存使用
+                    selfDrivenMode: true,          // 自己驱动模式
                     renderer: renderer,
                     camera: camera,
-                    sharedMemoryForWorkers: false
+                    sharedMemoryForWorkers: true,  // 启用共享内存，减少数据复制
+                    maxGaussiansToRender: 1000000, // 增加最大渲染数量
+                    resolutionScale: 0.8           // 降低分辨率以提升性能
                 });
                 
                 console.log('将DropInViewer添加到场景');
@@ -2119,8 +2126,10 @@
                 const loadPromise = dropInViewer.addSplatScene(modelPath, {
                     position: [0, -1, 0],  // 提高位置，与原来保持一致
                     scale: [1, 1, 1],
-                    showLoadingUI: false,
-                    splatAlphaRemovalThreshold: 5
+                    showLoadingUI: true,    // 显示内置加载UI
+                    splatAlphaRemovalThreshold: 5,
+                    preload: true,          // 预加载优化
+                    streaming: true         // 流式加载，边加载边显示
                 });
                 
                 await loadPromise;
@@ -2132,11 +2141,28 @@
                 splatLoaded = true;
                 selectedModelPath = modelPath;
                 console.log('模型加载成功:', modelPath);
+                
+                // 隐藏加载遮罩
+                hideLoadingOverlay();
                 showTemporaryMessage('模型加载成功');
             } catch (error) {
                 console.error('加载模型失败:', error);
+                hideLoadingOverlay();
                 showTemporaryMessage('模型加载失败: ' + error.message);
             }
+        }
+        
+        // 显示加载遮罩
+        function showLoadingOverlay(title, message) {
+            overlay.classList.remove('hidden');
+            overlayIcon.textContent = '⏳';
+            overlayTitle.textContent = title || '加载中...';
+            overlayText.textContent = message || '请稍候';
+        }
+        
+        // 隐藏加载遮罩
+        function hideLoadingOverlay() {
+            overlay.classList.add('hidden');
         }
 
         function openModelSelect() {
@@ -2223,7 +2249,7 @@
         function selectPlyMode(mode) {
             isPlyMode = true;
             plySubmenuOverlay.classList.add('hidden');
-            locationBar.style.display = 'none';
+            locationBar.style.display = 'flex';
             
             if (mode === 'ar') {
                 // AR模式
@@ -2231,6 +2257,9 @@
                     showOverlay('❌', '设备不支持WebXR', '请使用支持WebXR的浏览器');
                     return;
                 }
+                
+                // 初始化GPS定位
+                initGPS();
                 
                 // 显示加载遮罩
                 overlay.classList.remove('hidden');

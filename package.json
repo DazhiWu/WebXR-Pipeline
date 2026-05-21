@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "npx serve . -l 8080",
     "dev-ssl": "npx serve . -l 8443 --ssl-cert localhost.pem --ssl-key localhost-key.pem",
-    "build": "echo '纯前端项目，无需构建，直接部署index.html即可'"
+    "build": "vite build"
   },
   "keywords": [
     "webar",
@@ -19,5 +19,8 @@
   "license": "MIT",
   "dependencies": {
     "@mkkellogg/gaussian-splats-3d": "^0.4.7"
+  },
+  "devDependencies": {
+    "vite": "^8.0.13"
   }
 }

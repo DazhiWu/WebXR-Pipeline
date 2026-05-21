@@ -1,2 +1,5 @@
 node_modules/
 models/living-room.ply
+dist/
+dist.zip/
+ 
