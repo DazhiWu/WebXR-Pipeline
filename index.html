@@ -782,10 +782,6 @@
                 <div class="model-icon">🎯</div>
                 <div class="model-name">splat2.ply</div>
             </div>
-            <div class="model-item" data-model="models/客厅.ply">
-                <div class="model-icon">🏠</div>
-                <div class="model-name">客厅.ply</div>
-            </div>
         </div>
         <button id="model-select-btn">加载模型</button>
     </div>
@@ -796,7 +792,6 @@
     <!-- 引入Three.js和相关库 -->
     <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
     <script src="libs/gaussian-splats-3d.umd.cjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
 
     <script>
         // ==================== 全局变量与配置 ====================
@@ -2093,7 +2088,7 @@
                 dropInViewer = new GaussianSplats3D.DropInViewer({
                     gpuAcceleratedSort: false,
                     integerBasedSort: false,
-                    selfDrivenMode: true,  // 改为 true，让它自己驱动
+                    selfDrivenMode: true,
                     renderer: renderer,
                     camera: camera,
                     sharedMemoryForWorkers: false
@@ -2103,17 +2098,30 @@
                 parentGroup.add(dropInViewer);
                 
                 console.log('开始加载splat场景:', modelPath);
-                const loadPromise = dropInViewer.addSplatScene(modelPath, {
-                    position: [0, -1, 0],  // 提高位置，与原来保持一致
+                
+                const fullUrl = new URL(modelPath, window.location.href).href;
+                console.log('完整加载URL:', fullUrl);
+                
+                console.log('测试文件下载...');
+                const testResponse = await fetch(fullUrl, { method: 'HEAD', mode: 'no-cors' });
+                console.log('文件下载状态:', testResponse.type);
+                
+                const releaseUrl = fullUrl.replace('github.com', 'github.com').replace('/releases/download/', '/releases/download/');
+                console.log('使用的下载URL:', releaseUrl);
+                
+                const loadPromise = dropInViewer.addSplatScene(releaseUrl, {
+                    position: [0, -1, 0],
                     scale: [1, 1, 1],
                     showLoadingUI: false,
-                    splatAlphaRemovalThreshold: 5
+                    splatAlphaRemovalThreshold: 5,
+                    onProgress: function(progress) {
+                        console.log('加载进度:', Math.round(progress * 100) + '%');
+                    }
                 });
                 
                 await loadPromise;
                 console.log('splat场景加载完成');
                 
-                // 加载完成后调整模型方向（修复倒立问题）
                 dropInViewer.rotation.x = -Math.PI;
                 
                 splatLoaded = true;
@@ -2122,6 +2130,7 @@
                 showTemporaryMessage('模型加载成功');
             } catch (error) {
                 console.error('加载模型失败:', error);
+                console.error('错误堆栈:', error.stack);
                 showTemporaryMessage('模型加载失败: ' + error.message);
             }
         }
@@ -2269,8 +2278,14 @@
             });
             
             // 模块选择事件
-            plyModuleCard.addEventListener('click', () => selectModule('ply'));
-            pipelineModuleCard.addEventListener('click', () => selectModule('pipeline'));
+            plyModuleCard.addEventListener('click', () => {
+                console.log('PLY文件加载按钮被点击');
+                selectModule('ply');
+            });
+            pipelineModuleCard.addEventListener('click', () => {
+                console.log('AR管道按钮被点击');
+                selectModule('pipeline');
+            });
             plyBackBtn.addEventListener('click', () => {
                 plySubmenuOverlay.classList.add('hidden');
                 moduleSelectOverlay.classList.remove('hidden');
