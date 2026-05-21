@@ -796,7 +796,6 @@
     <!-- 引入Three.js和相关库 -->
     <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
     <script src="libs/gaussian-splats-3d.umd.cjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
 
     <script>
         // ==================== 全局变量与配置 ====================
@@ -2093,7 +2092,7 @@
                 dropInViewer = new GaussianSplats3D.DropInViewer({
                     gpuAcceleratedSort: false,
                     integerBasedSort: false,
-                    selfDrivenMode: true,  // 改为 true，让它自己驱动
+                    selfDrivenMode: true,
                     renderer: renderer,
                     camera: camera,
                     sharedMemoryForWorkers: false
@@ -2103,17 +2102,23 @@
                 parentGroup.add(dropInViewer);
                 
                 console.log('开始加载splat场景:', modelPath);
-                const loadPromise = dropInViewer.addSplatScene(modelPath, {
-                    position: [0, -1, 0],  // 提高位置，与原来保持一致
+                
+                const fullUrl = new URL(modelPath, window.location.href).href;
+                console.log('完整加载URL:', fullUrl);
+                
+                const loadPromise = dropInViewer.addSplatScene(fullUrl, {
+                    position: [0, -1, 0],
                     scale: [1, 1, 1],
                     showLoadingUI: false,
-                    splatAlphaRemovalThreshold: 5
+                    splatAlphaRemovalThreshold: 5,
+                    onProgress: function(progress) {
+                        console.log('加载进度:', Math.round(progress * 100) + '%');
+                    }
                 });
                 
                 await loadPromise;
                 console.log('splat场景加载完成');
                 
-                // 加载完成后调整模型方向（修复倒立问题）
                 dropInViewer.rotation.x = -Math.PI;
                 
                 splatLoaded = true;
@@ -2122,6 +2127,7 @@
                 showTemporaryMessage('模型加载成功');
             } catch (error) {
                 console.error('加载模型失败:', error);
+                console.error('错误堆栈:', error.stack);
                 showTemporaryMessage('模型加载失败: ' + error.message);
             }
         }
