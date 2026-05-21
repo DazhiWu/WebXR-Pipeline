@@ -1759,14 +1759,16 @@
                 isARActive = true;
                 arButton.style.display = 'none';
                 
-                // PLY模式不显示扫描提示，管道模式显示
-                if (!isPlyMode) {
-                    instructions.style.display = 'block';
-                    instructions.textContent = '移动手机扫描地面';
-                }
-                
                 // 隐藏加载遮罩
                 overlay.classList.add('hidden');
+                
+                // PLY模式：直接显示模型选择界面，不显示扫描提示
+                if (isPlyMode) {
+                    modelSelectOverlay.classList.remove('hidden');
+                } else {
+                    // 管道模式显示扫描提示
+                    instructions.style.display = 'block';
+                }
                 
                 // 开始渲染循环
                 renderer.setAnimationLoop(render);
@@ -1844,7 +1846,7 @@
             renderer.render(scene, camera);
         }
 
-        function createARAnchor(matrix, referenceSpace) {
+        async function createARAnchor(matrix, referenceSpace) {
             arAnchor = new THREE.Group();
             arAnchor.matrix.fromArray(matrix);
             arAnchor.matrix.decompose(arAnchor.position, arAnchor.quaternion, arAnchor.scale);
@@ -1852,15 +1854,15 @@
             scene.add(arAnchor);
             
             if (isPlyMode) {
-                // PLY模式：直接加载选中的模型
+                // PLY模式：如果已选择模型，直接加载并放置到地面
+                modelSwitchBtn.classList.add('show');
+                instructions.textContent = '点击模型查看详情';
                 groundDetected = true;
                 
+                // 如果已选择模型，加载模型到锚点位置
                 if (selectedModelPath) {
-                    loadPlyModel(selectedModelPath, arAnchor);
+                    await loadPlyModel(selectedModelPath, arAnchor);
                 }
-                
-                // 显示模型切换按钮
-                modelSwitchBtn.classList.add('show');
             } else {
                 // AR管道模式：创建管网
                 createPipelines();
@@ -2171,15 +2173,12 @@
             
             modelSelectOverlay.classList.add('hidden');
             
-            if (isPlyMode && !isDesktopMode && !isARActive) {
-                // AR模式：先启动AR，扫描地面后再加载模型
-                overlay.classList.remove('hidden');
-                overlayIcon.textContent = '📱';
-                overlayTitle.textContent = '正在准备AR环境...';
-                overlayText.textContent = '请允许浏览器获取相机权限';
-                await startAR();
+            if (isARActive && !arAnchor) {
+                // AR模式且未检测到地面：显示扫描提示，等待地面检测
+                instructions.style.display = 'block';
+                instructions.textContent = '移动手机扫描地面';
             } else {
-                // 桌面模式或已在AR中：直接加载模型
+                // 桌面模式或已检测到地面：直接加载模型
                 let parentGroup = scene;
                 if (arAnchor) {
                     parentGroup = arAnchor;
@@ -2227,11 +2226,17 @@
             locationBar.style.display = 'none';
             
             if (mode === 'ar') {
-                // AR模式：先显示模型选择界面，选择后再启动AR
+                // AR模式
                 if (!navigator.xr) {
                     showOverlay('❌', '设备不支持WebXR', '请使用支持WebXR的浏览器');
                     return;
                 }
+                
+                // 显示加载遮罩
+                overlay.classList.remove('hidden');
+                overlayIcon.textContent = '📱';
+                overlayTitle.textContent = '正在准备AR环境...';
+                overlayText.textContent = '请允许浏览器获取相机权限';
                 
                 navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
                     if (!supported) {
@@ -2239,8 +2244,8 @@
                         return;
                     }
                     
-                    // 直接显示模型选择界面
-                    modelSelectOverlay.classList.remove('hidden');
+                    // 启动AR
+                    startAR();
                 });
             } else if (mode === 'desktop') {
                 // 桌面测试模式（Three.js已在init中初始化）
