@@ -2106,6 +2106,12 @@
                 const fullUrl = new URL(modelPath, window.location.href).href;
                 console.log('完整加载URL:', fullUrl);
                 
+                console.log('测试文件下载...');
+                const testResponse = await fetch(fullUrl, { method: 'HEAD' });
+                console.log('文件下载状态:', testResponse.status, testResponse.statusText);
+                console.log('Content-Type:', testResponse.headers.get('Content-Type'));
+                console.log('Content-Length:', testResponse.headers.get('Content-Length'));
+                
                 const loadPromise = dropInViewer.addSplatScene(fullUrl, {
                     position: [0, -1, 0],
                     scale: [1, 1, 1],
