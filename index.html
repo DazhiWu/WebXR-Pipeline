@@ -607,6 +607,209 @@
         #model-switch-btn:hover {
             transform: scale(1.05);
         }
+
+        /* 显示模式选择界面 */
+        #display-mode-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1012;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        #display-mode-overlay.hidden {
+            display: none;
+        }
+
+        #display-mode-back-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 10px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 20px;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        #display-mode-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 40px;
+        }
+
+        .mode-card {
+            width: 200px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 25px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+            margin-bottom: 20px;
+        }
+
+        .mode-card:hover {
+            transform: scale(1.05);
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #667eea;
+        }
+
+        .mode-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .mode-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+
+        .mode-desc {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        /* 双模型选择界面 */
+        #dual-model-select-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1012;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 20px;
+        }
+
+        #dual-model-select-overlay.hidden {
+            display: none;
+        }
+
+        #dual-model-back-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 10px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 20px;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        #dual-model-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 20px;
+        }
+
+        .dual-model-container {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .model-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .model-column-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .model-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .model-list .model-item {
+            width: 140px;
+        }
+
+        #dual-model-select-btn {
+            padding: 14px 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 30px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        #dual-model-select-btn:hover {
+            transform: scale(1.05);
+        }
+
+        /* 分割线 */
+        .split-line {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: #667eea;
+            cursor: ew-resize;
+            z-index: 10000;
+            transform: translateX(-50%);
+            box-shadow: 0 0 10px rgba(102, 126, 234, 0.8);
+        }
+
+        .split-line::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50px;
+            height: 50px;
+            background: #667eea;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .split-line::after {
+            content: '|||';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .split-line.hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -770,7 +973,26 @@
         </div>
     </div>
 
-    <!-- 模型选择界面 -->
+    <!-- 显示模式选择界面 -->
+    <div id="display-mode-overlay" class="hidden">
+        <button id="display-mode-back-btn">← 返回</button>
+        
+        <div id="display-mode-title">选择展示模式</div>
+        
+        <div class="mode-card" id="single-model-mode">
+            <div class="mode-icon">📦</div>
+            <div class="mode-name">单个模型</div>
+            <div class="mode-desc">展示单个3D模型</div>
+        </div>
+        
+        <div class="mode-card" id="split-compare-mode">
+            <div class="mode-icon">🔍</div>
+            <div class="mode-name">卷帘对比</div>
+            <div class="mode-desc">同时展示两个模型进行对比，拖动分割线查看</div>
+        </div>
+    </div>
+
+    <!-- 模型选择界面（单模型） -->
     <div id="model-select-overlay" class="hidden">
         <div id="model-select-title">选择模型</div>
         <div id="model-list">
@@ -792,6 +1014,61 @@
             </div>
         </div>
         <button id="model-select-btn">加载模型</button>
+    </div>
+
+    <!-- 双模型选择界面（卷帘对比） -->
+    <div id="dual-model-select-overlay" class="hidden">
+        <button id="dual-model-back-btn">← 返回</button>
+        
+        <div id="dual-model-title">选择对比模型</div>
+        
+        <div class="dual-model-container">
+            <div class="model-column">
+                <div class="model-column-title">模型A</div>
+                <div id="model-list-a" class="model-list">
+                    <div class="model-item" data-model="models/splat.ply">
+                        <div class="model-icon">🎲</div>
+                        <div class="model-name">splat.ply</div>
+                    </div>
+                    <div class="model-item" data-model="models/splat2.ply">
+                        <div class="model-icon">🎯</div>
+                        <div class="model-name">splat2.ply</div>
+                    </div>
+                    <div class="model-item" data-model="models/living-room.ply">
+                        <div class="model-icon">🏠</div>
+                        <div class="model-name">living-room.ply</div>
+                    </div>
+                    <div class="model-item" data-model="models/flowerpat.ply">
+                        <div class="model-icon">🌸</div>
+                        <div class="model-name">flowerpat.ply</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="model-column">
+                <div class="model-column-title">模型B</div>
+                <div id="model-list-b" class="model-list">
+                    <div class="model-item" data-model="models/splat.ply">
+                        <div class="model-icon">🎲</div>
+                        <div class="model-name">splat.ply</div>
+                    </div>
+                    <div class="model-item" data-model="models/splat2.ply">
+                        <div class="model-icon">🎯</div>
+                        <div class="model-name">splat2.ply</div>
+                    </div>
+                    <div class="model-item" data-model="models/living-room.ply">
+                        <div class="model-icon">🏠</div>
+                        <div class="model-name">living-room.ply</div>
+                    </div>
+                    <div class="model-item" data-model="models/flowerpat.ply">
+                        <div class="model-icon">🌸</div>
+                        <div class="model-name">flowerpat.ply</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <button id="dual-model-select-btn">开始对比</button>
     </div>
 
     <!-- 模型切换按钮 -->
@@ -825,9 +1102,18 @@
         
         // PLY模型加载相关变量
         let currentModule = null;  // 当前选择的模块: 'ply' 或 'pipeline'
-        let selectedModelPath = null;  // 当前选中的模型路径
+        let selectedModelPath = null;  // 当前选中的模型路径（单模型模式）
         let isPlyMode = false;  // 是否处于PLY加载模式
         let groundDetected = false;  // 是否已检测到地面
+        
+        // 卷帘对比模式相关变量
+        let displayMode = 'single';  // 显示模式: 'single' 单模型, 'split' 卷帘对比
+        let selectedModelPathA = null;  // 模型A路径
+        let selectedModelPathB = null;  // 模型B路径
+        let dropInViewerA = null;  // 模型A的DropInViewer
+        let dropInViewerB = null;  // 模型B的DropInViewer
+        let splitPosition = 0.5;  // 分割线位置 (0-1)
+        let isDragging = false;  // 是否正在拖动分割线
 
         // 校准参数
         let calibration = {
@@ -1847,7 +2133,11 @@
                 }
             }
             
-            renderer.render(scene, camera);
+            if (displayMode === 'split' && dropInViewerA && dropInViewerB) {
+                updateSplitView();
+            } else {
+                renderer.render(scene, camera);
+            }
         }
 
         async function createARAnchor(matrix, referenceSpace) {
@@ -2033,13 +2323,7 @@
             camera.position.set(10, 10, 10);
             camera.lookAt(0, 0, 0);
             
-            if (isPlyMode) {
-                // PLY模式：显示模型选择界面
-                modelSwitchBtn.classList.add('show');
-                instructions.textContent = '点击下方按钮选择模型，使用鼠标旋转视角';
-                instructions.style.display = 'block';
-                modelSelectOverlay.classList.remove('hidden');
-            } else {
+            if (!isPlyMode) {
                 // AR管道模式：生成管线数据
                 generatePipelineData();
                 
@@ -2080,7 +2364,12 @@
             if (controls) {
                 controls.update();
             }
-            renderer.render(scene, camera);
+            
+            if (displayMode === 'split' && dropInViewerA && dropInViewerB) {
+                updateSplitView();
+            } else {
+                renderer.render(scene, camera);
+            }
         }
         
         // ==================== PLY模型加载功能 ====================
@@ -2199,6 +2488,254 @@
             }
         }
 
+        function openDualModelSelect() {
+            const dualOverlay = document.getElementById('dual-model-select-overlay');
+            dualOverlay.classList.remove('hidden');
+            
+            // 清除之前的选择
+            document.querySelectorAll('#model-list-a .model-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            document.querySelectorAll('#model-list-b .model-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            
+            // 高亮已选择的模型
+            if (selectedModelPathA) {
+                const selectedItem = document.querySelector(`#model-list-a [data-model="${selectedModelPathA}"]`);
+                if (selectedItem) {
+                    selectedItem.classList.add('selected');
+                }
+            }
+            if (selectedModelPathB) {
+                const selectedItem = document.querySelector(`#model-list-b [data-model="${selectedModelPathB}"]`);
+                if (selectedItem) {
+                    selectedItem.classList.add('selected');
+                }
+            }
+        }
+
+        function selectModelA(event) {
+            document.querySelectorAll('#model-list-a .model-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            event.currentTarget.classList.add('selected');
+            selectedModelPathA = event.currentTarget.dataset.model;
+            console.log('选择模型A:', selectedModelPathA);
+        }
+
+        function selectModelB(event) {
+            document.querySelectorAll('#model-list-b .model-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            event.currentTarget.classList.add('selected');
+            selectedModelPathB = event.currentTarget.dataset.model;
+            console.log('选择模型B:', selectedModelPathB);
+        }
+
+        async function confirmDualModelSelection() {
+            console.log('confirmDualModelSelection 被调用，模型A:', selectedModelPathA, '模型B:', selectedModelPathB);
+            
+            if (!selectedModelPathA || !selectedModelPathB) {
+                showTemporaryMessage('请选择两个模型进行对比');
+                return;
+            }
+            
+            document.getElementById('dual-model-select-overlay').classList.add('hidden');
+            
+            if (isARActive && !arAnchor) {
+                instructions.style.display = 'block';
+                instructions.textContent = '移动手机扫描地面';
+            } else {
+                let parentGroup = scene;
+                if (arAnchor) {
+                    parentGroup = arAnchor;
+                }
+                
+                await loadDualModels(selectedModelPathA, selectedModelPathB, parentGroup);
+                
+                if (isDesktopMode && controls) {
+                    camera.position.set(8, 6, 8);
+                    camera.lookAt(0, 1, 0);
+                }
+                
+                // 创建分割线UI
+                createSplitLine();
+            }
+        }
+
+        async function loadDualModels(modelPathA, modelPathB, parentGroup) {
+            console.log('开始加载双模型:', modelPathA, modelPathB);
+            
+            // 清理旧模型
+            if (dropInViewerA) {
+                if (arAnchor) arAnchor.remove(dropInViewerA);
+                else scene.remove(dropInViewerA);
+                dropInViewerA.dispose();
+                dropInViewerA = null;
+            }
+            if (dropInViewerB) {
+                if (arAnchor) arAnchor.remove(dropInViewerB);
+                else scene.remove(dropInViewerB);
+                dropInViewerB.dispose();
+                dropInViewerB = null;
+            }
+            if (dropInViewer) {
+                if (arAnchor) arAnchor.remove(dropInViewer);
+                else scene.remove(dropInViewer);
+                dropInViewer.dispose();
+                dropInViewer = null;
+            }
+            
+            try {
+                const GaussianSplats3D = window['Gaussian Splats 3D'];
+                if (typeof GaussianSplats3D === 'undefined') {
+                    console.warn('高斯泼溅库未加载');
+                    showTemporaryMessage('高斯泼溅库加载失败');
+                    return;
+                }
+                
+                // 加载模型A
+                dropInViewerA = new GaussianSplats3D.DropInViewer({
+                    gpuAcceleratedSort: false,
+                    integerBasedSort: false,
+                    selfDrivenMode: true,
+                    renderer: renderer,
+                    camera: camera,
+                    sharedMemoryForWorkers: false
+                });
+                parentGroup.add(dropInViewerA);
+                
+                await dropInViewerA.addSplatScene(modelPathA, {
+                    position: [0, -1, 0],
+                    scale: [1, 1, 1],
+                    showLoadingUI: false,
+                    splatAlphaRemovalThreshold: 5
+                });
+                dropInViewerA.rotation.x = -Math.PI;
+                
+                // 加载模型B
+                dropInViewerB = new GaussianSplats3D.DropInViewer({
+                    gpuAcceleratedSort: false,
+                    integerBasedSort: false,
+                    selfDrivenMode: true,
+                    renderer: renderer,
+                    camera: camera,
+                    sharedMemoryForWorkers: false
+                });
+                parentGroup.add(dropInViewerB);
+                
+                await dropInViewerB.addSplatScene(modelPathB, {
+                    position: [0, -1, 0],
+                    scale: [1, 1, 1],
+                    showLoadingUI: false,
+                    splatAlphaRemovalThreshold: 5
+                });
+                dropInViewerB.rotation.x = -Math.PI;
+                
+                splatLoaded = true;
+                console.log('双模型加载成功');
+                showTemporaryMessage('双模型加载成功，拖动分割线进行对比');
+            } catch (error) {
+                console.error('加载双模型失败:', error);
+                showTemporaryMessage('模型加载失败: ' + error.message);
+            }
+        }
+
+        function createSplitLine() {
+            // 创建分割线UI
+            let splitLine = document.getElementById('split-line');
+            if (!splitLine) {
+                splitLine = document.createElement('div');
+                splitLine.id = 'split-line';
+                splitLine.className = 'split-line';
+                splitLine.style.left = '50%';
+                document.body.appendChild(splitLine);
+            }
+            splitLine.classList.remove('hidden');
+            
+            // 添加拖动事件
+            splitLine.addEventListener('mousedown', startDrag);
+            splitLine.addEventListener('touchstart', startDrag);
+            
+            document.addEventListener('mousemove', onDrag);
+            document.addEventListener('touchmove', onDrag);
+            document.addEventListener('mouseup', stopDrag);
+            document.addEventListener('touchend', stopDrag);
+        }
+
+        function startDrag(event) {
+            isDragging = true;
+            event.preventDefault();
+        }
+
+        function onDrag(event) {
+            if (!isDragging) return;
+            
+            let clientX;
+            if (event.touches && event.touches.length > 0) {
+                clientX = event.touches[0].clientX;
+            } else {
+                clientX = event.clientX;
+            }
+            
+            splitPosition = clientX / window.innerWidth;
+            splitPosition = Math.max(0.1, Math.min(0.9, splitPosition));
+            
+            const splitLine = document.getElementById('split-line');
+            if (splitLine) {
+                splitLine.style.left = (splitPosition * 100) + '%';
+            }
+        }
+
+        function stopDrag() {
+            isDragging = false;
+        }
+
+        function updateSplitView() {
+            if (displayMode !== 'split' || !dropInViewerA || !dropInViewerB) return;
+            
+            const width = window.innerWidth;
+            const splitX = splitPosition * width;
+            
+            // 先清除画布
+            renderer.clear();
+            
+            // 通过调整scissorRect来实现卷帘效果
+            renderer.setScissorTest(true);
+            
+            // 渲染模型A（左侧）
+            // 先隐藏模型B
+            if (dropInViewerB.parent) {
+                dropInViewerB.visible = false;
+            }
+            renderer.setScissor(0, 0, splitX, window.innerHeight);
+            renderer.setViewport(0, 0, splitX, window.innerHeight);
+            renderer.render(scene, camera);
+            
+            // 渲染模型B（右侧）
+            // 隐藏模型A，显示模型B
+            if (dropInViewerA.parent) {
+                dropInViewerA.visible = false;
+            }
+            if (dropInViewerB.parent) {
+                dropInViewerB.visible = true;
+            }
+            renderer.setScissor(splitX, 0, width - splitX, window.innerHeight);
+            renderer.setViewport(splitX, 0, width - splitX, window.innerHeight);
+            renderer.render(scene, camera);
+            
+            // 恢复两个模型的可见性
+            if (dropInViewerA.parent) {
+                dropInViewerA.visible = true;
+            }
+            if (dropInViewerB.parent) {
+                dropInViewerB.visible = true;
+            }
+            
+            renderer.setScissorTest(false);
+        }
+
         // ==================== 模块选择功能 ====================
         function selectModule(module) {
             currentModule = module;
@@ -2231,7 +2768,7 @@
             locationBar.style.display = 'flex';
             
             if (mode === 'ar') {
-                // AR模式
+                // AR模式 - 先显示模式选择界面
                 if (!navigator.xr) {
                     showOverlay('❌', '设备不支持WebXR', '请使用支持WebXR的浏览器');
                     return;
@@ -2240,25 +2777,53 @@
                 // 初始化GPS定位
                 initGPS();
                 
-                // 显示加载遮罩
-                overlay.classList.remove('hidden');
-                overlayIcon.textContent = '📱';
-                overlayTitle.textContent = '正在准备AR环境...';
-                overlayText.textContent = '请允许浏览器获取相机权限';
-                
-                navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-                    if (!supported) {
-                        showOverlay('❌', '设备不支持AR模式', '请使用支持ARCore/ARKit的设备');
-                        return;
-                    }
-                    
-                    // 启动AR
-                    startAR();
-                });
+                // 显示模式选择界面
+                document.getElementById('display-mode-overlay').classList.remove('hidden');
             } else if (mode === 'desktop') {
-                // 桌面测试模式（Three.js已在init中初始化）
+                // 桌面测试模式 - 先显示模式选择界面
+                document.getElementById('display-mode-overlay').classList.remove('hidden');
+            }
+        }
+
+        function selectDisplayMode(mode) {
+            displayMode = mode;
+            document.getElementById('display-mode-overlay').classList.add('hidden');
+            
+            // 桌面模式下先初始化桌面环境
+            if (!isARActive) {
                 startDesktopTest();
             }
+            
+            if (displayMode === 'single') {
+                // 单模型模式
+                openModelSelect();
+            } else {
+                // 卷帘对比模式
+                openDualModelSelect();
+            }
+        }
+
+        function startPlyAR() {
+            // 显示加载遮罩
+            overlay.classList.remove('hidden');
+            overlayIcon.textContent = '📱';
+            overlayTitle.textContent = '正在准备AR环境...';
+            overlayText.textContent = '请允许浏览器获取相机权限';
+            
+            navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+                if (!supported) {
+                    showOverlay('❌', '设备不支持AR模式', '请使用支持ARCore/ARKit的设备');
+                    return;
+                }
+                
+                // 启动AR
+                startAR();
+            });
+        }
+
+        function startPlyDesktop() {
+            // 桌面测试模式（Three.js已在init中初始化）
+            startDesktopTest();
         }
 
         // ==================== 主初始化函数 ====================
@@ -2312,15 +2877,21 @@
             plyArMode.addEventListener('click', () => selectPlyMode('ar'));
             plyDesktopMode.addEventListener('click', () => selectPlyMode('desktop'));
             
-            // 模型选择事件 - 直接给每个model-item添加事件监听器
-            document.querySelectorAll('.model-item').forEach(item => {
+            // 显示模式选择事件
+            document.getElementById('display-mode-back-btn').addEventListener('click', () => {
+                document.getElementById('display-mode-overlay').classList.add('hidden');
+                plySubmenuOverlay.classList.remove('hidden');
+            });
+            document.getElementById('single-model-mode').addEventListener('click', () => selectDisplayMode('single'));
+            document.getElementById('split-compare-mode').addEventListener('click', () => selectDisplayMode('split'));
+            
+            // 单模型选择事件
+            document.querySelectorAll('#model-list .model-item').forEach(item => {
                 item.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    // 清除之前的选择
-                    document.querySelectorAll('.model-item').forEach(i => {
+                    document.querySelectorAll('#model-list .model-item').forEach(i => {
                         i.classList.remove('selected');
                     });
-                    // 选中当前项
                     item.classList.add('selected');
                     selectedModelPath = item.dataset.model;
                     console.log('选择了模型:', selectedModelPath);
@@ -2332,7 +2903,33 @@
             });
             modelSwitchBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                openModelSelect();
+                if (displayMode === 'split') {
+                    openDualModelSelect();
+                } else {
+                    openModelSelect();
+                }
+            });
+            
+            // 双模型选择事件
+            document.getElementById('dual-model-back-btn').addEventListener('click', () => {
+                document.getElementById('dual-model-select-overlay').classList.add('hidden');
+                document.getElementById('display-mode-overlay').classList.remove('hidden');
+            });
+            document.querySelectorAll('#model-list-a .model-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectModelA(e);
+                });
+            });
+            document.querySelectorAll('#model-list-b .model-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectModelB(e);
+                });
+            });
+            document.getElementById('dual-model-select-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                confirmDualModelSelection();
             });
             
             // AR按钮点击事件
