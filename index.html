@@ -2054,14 +2054,15 @@
                 // 隐藏加载遮罩
                 overlay.classList.add('hidden');
                 
-                // PLY模式：根据显示模式显示相应的模型选择界面
+                // PLY模式：模型已经在AR启动前选择好了，直接显示扫描提示
                 if (isPlyMode) {
-                    if (displayMode === 'split') {
-                        // 卷帘对比模式：显示双模型选择界面
-                        openDualModelSelect();
+                    // 如果已选择模型，直接显示扫描提示等待地面检测
+                    if (selectedModelPath || (displayMode === 'split' && selectedModelPathA && selectedModelPathB)) {
+                        instructions.style.display = 'block';
+                        instructions.textContent = '移动手机扫描地面';
                     } else {
-                        // 单模型模式：显示单个模型选择界面
-                        modelSelectOverlay.classList.remove('hidden');
+                        // 未选择模型（异常情况）
+                        showOverlay('❌', '请先选择模型', '请返回重新选择模型');
                     }
                 } else {
                     // 管道模式显示扫描提示
@@ -2482,9 +2483,12 @@
             modelSelectOverlay.classList.add('hidden');
             
             if (isARActive && !arAnchor) {
-                // AR模式且未检测到地面：显示扫描提示，等待地面检测
+                // AR模式已启动但未检测到地面：显示扫描提示，等待地面检测
                 instructions.style.display = 'block';
                 instructions.textContent = '移动手机扫描地面';
+            } else if (!isDesktopMode && !isARActive) {
+                // AR模式但AR还未启动：启动AR环境
+                startPlyAR();
             } else {
                 // 桌面模式或已检测到地面：直接加载模型
                 let parentGroup = scene;
@@ -2558,9 +2562,14 @@
             document.getElementById('dual-model-select-overlay').classList.add('hidden');
             
             if (isARActive && !arAnchor) {
+                // AR模式已启动但未检测到地面：显示扫描提示，等待地面检测
                 instructions.style.display = 'block';
                 instructions.textContent = '移动手机扫描地面';
+            } else if (!isDesktopMode && !isARActive) {
+                // AR模式但AR还未启动：启动AR环境
+                startPlyAR();
             } else {
+                // 桌面模式或已检测到地面：直接加载模型
                 let parentGroup = scene;
                 if (arAnchor) {
                     parentGroup = arAnchor;
@@ -2925,20 +2934,22 @@
             displayMode = mode;
             document.getElementById('display-mode-overlay').classList.add('hidden');
             
-            // 只有桌面模式才初始化桌面环境
             if (isDesktopMode) {
+                // 桌面模式：先初始化桌面环境，再显示模型选择界面
                 startDesktopTest();
+                
+                if (displayMode === 'single') {
+                    openModelSelect();
+                } else {
+                    openDualModelSelect();
+                }
             } else {
-                // AR模式：启动AR环境
-                startPlyAR();
-            }
-            
-            if (displayMode === 'single') {
-                // 单模型模式
-                openModelSelect();
-            } else {
-                // 卷帘对比模式
-                openDualModelSelect();
+                // AR模式：先显示模型选择界面，模型选择完成后再启动AR
+                if (displayMode === 'single') {
+                    openModelSelect();
+                } else {
+                    openDualModelSelect();
+                }
             }
         }
 
