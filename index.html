@@ -1116,6 +1116,8 @@
         let isDragging = false;  // 是否正在拖动分割线
         let renderTargetA = null;  // 模型A的渲染目标
         let renderTargetB = null;  // 模型B的渲染目标
+        let clipPlaneA = null;  // 模型A的裁剪平面（AR模式）
+        let clipPlaneB = null;  // 模型B的裁剪平面（AR模式）
 
         // 校准参数
         let calibration = {
@@ -2159,18 +2161,22 @@
             if (isPlyMode) {
                 // PLY模式：如果已选择模型，直接加载并放置到地面
                 modelSwitchBtn.classList.add('show');
-                instructions.textContent = '点击模型查看详情';
+                instructions.textContent = '正在加载模型...';
                 groundDetected = true;
                 
                 // 如果已选择模型，加载模型到锚点位置
                 if (selectedModelPath) {
                     await loadPlyModel(selectedModelPath, arAnchor);
+                    instructions.textContent = '点击模型查看详情';
+                    reticle.visible = false;
                 }
                 
                 // 如果是卷帘对比模式且已选择两个模型
                 if (displayMode === 'split' && selectedModelPathA && selectedModelPathB) {
                     await loadDualModels(selectedModelPathA, selectedModelPathB, arAnchor);
                     createSplitLine();
+                    instructions.textContent = '点击模型查看详情';
+                    reticle.visible = false;
                 }
             } else {
                 // AR管道模式：创建管网
@@ -2184,10 +2190,8 @@
                 
                 // 隐藏标记
                 instructions.textContent = '点击管线查看详情信息';
+                reticle.visible = false;
             }
-            
-            // 隐藏标记
-            reticle.visible = false;
         }
         
         async function loadGaussianSplat(parentGroup) {
@@ -2692,6 +2696,19 @@
                 dropInViewerA.scale.set(1, 1, 1);
                 dropInViewerB.scale.set(1, 1, 1);
                 
+                // 为AR模式添加裁剪平面实现卷帘效果
+                if (isARActive) {
+                    // 创建裁剪平面
+                    clipPlaneA = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0); // 模型A：裁剪右侧
+                    clipPlaneB = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0); // 模型B：裁剪左侧
+                    
+                    // 设置渲染器的裁剪平面
+                    renderer.localClippingEnabled = true;
+                    
+                    // 更新裁剪平面位置（基于当前分割位置）
+                    updateClipPlanes();
+                }
+                
                 splatLoaded = true;
                 console.log('双模型加载成功');
                 showTemporaryMessage('双模型加载成功，拖动分割线进行对比');
@@ -2745,10 +2762,52 @@
             if (splitLine) {
                 splitLine.style.left = (splitPosition * 100) + '%';
             }
+            
+            // 更新裁剪平面位置（AR模式）
+            updateClipPlanes();
         }
 
         function stopDrag() {
             isDragging = false;
+        }
+        
+        function updateSplitOverlay(splitX) {
+            // 更新CSS遮罩层位置（如果存在）
+            const overlayA = document.getElementById('split-overlay-a');
+            const overlayB = document.getElementById('split-overlay-b');
+            
+            if (overlayA) {
+                overlayA.style.clipPath = `inset(0 ${window.innerWidth - splitX}px 0 0)`;
+            }
+            if (overlayB) {
+                overlayB.style.clipPath = `inset(0 0 0 ${splitX}px)`;
+            }
+        }
+
+        function updateClipPlanes() {
+            if (!clipPlaneA || !clipPlaneB || !camera) return;
+            
+            // 计算分割线在3D空间中的位置
+            const width = window.innerWidth;
+            const splitX = splitPosition * width;
+            
+            // 将屏幕坐标转换为归一化设备坐标
+            const ndcX = (splitX / width) * 2 - 1;
+            
+            // 创建一条从相机出发穿过分割线的射线
+            const ray = new THREE.Raycaster();
+            ray.setFromCamera(new THREE.Vector2(ndcX, 0), camera);
+            
+            // 计算射线与地面（y=0）的交点
+            const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+            const intersectPoint = new THREE.Vector3();
+            ray.ray.intersectPlane(groundPlane, intersectPoint);
+            
+            if (intersectPoint) {
+                // 更新裁剪平面位置
+                clipPlaneA.constant = -intersectPoint.x;
+                clipPlaneB.constant = intersectPoint.x;
+            }
         }
 
         function updateSplitView() {
@@ -2759,7 +2818,7 @@
             const splitX = splitPosition * width;
             
             if (isARActive) {
-                // AR模式：使用渲染目标实现卷帘效果
+                // AR模式：使用双渲染目标 + CSS遮罩实现卷帘效果
                 if (!renderTargetA || !renderTargetB) return;
                 
                 // 确保渲染目标尺寸正确
@@ -2786,6 +2845,12 @@
                 dropInViewerA.visible = true;
                 dropInViewerB.visible = true;
                 
+                // 更新CSS遮罩层位置
+                updateSplitOverlay(splitX);
+                
+                // 渲染合成结果到屏幕
+                renderer.setRenderTarget(null);
+                
                 // 创建合成场景（如果不存在）
                 if (!window.splitScene) {
                     createSplitCompositeScene();
@@ -2793,9 +2858,6 @@
                 
                 // 更新着色器的分割位置
                 window.splitMaterial.uniforms.splitPosition.value = splitPosition;
-                
-                // 渲染合成结果到屏幕
-                renderer.setRenderTarget(null);
                 
                 // 更新纹理引用
                 window.splitPlane.material.uniforms.textureA.value = renderTargetA.texture;
