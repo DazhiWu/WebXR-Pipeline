@@ -2696,17 +2696,9 @@
                 dropInViewerA.scale.set(1, 1, 1);
                 dropInViewerB.scale.set(1, 1, 1);
                 
-                // 为AR模式添加裁剪平面实现卷帘效果
+                // 为AR模式创建双canvas实现卷帘效果
                 if (isARActive) {
-                    // 创建裁剪平面
-                    clipPlaneA = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0); // 模型A：裁剪右侧
-                    clipPlaneB = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0); // 模型B：裁剪左侧
-                    
-                    // 设置渲染器的裁剪平面
-                    renderer.localClippingEnabled = true;
-                    
-                    // 更新裁剪平面位置（基于当前分割位置）
-                    updateClipPlanes();
+                    createSplitCanvasOverlay();
                 }
                 
                 splatLoaded = true;
@@ -2809,6 +2801,47 @@
                 clipPlaneB.constant = intersectPoint.x;
             }
         }
+        
+        function createSplitCanvasOverlay() {
+            // 创建两个canvas覆盖层
+            const canvasA = document.createElement('canvas');
+            canvasA.id = 'split-canvas-a';
+            canvasA.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                pointer-events: none;
+                z-index: 10;
+            `;
+            
+            const canvasB = document.createElement('canvas');
+            canvasB.id = 'split-canvas-b';
+            canvasB.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                pointer-events: none;
+                z-index: 11;
+            `;
+            
+            document.body.appendChild(canvasA);
+            document.body.appendChild(canvasB);
+            
+            // 创建两个额外的渲染器用于AR模式
+            const rendererA = new THREE.WebGLRenderer({ canvas: canvasA, alpha: true });
+            const rendererB = new THREE.WebGLRenderer({ canvas: canvasB, alpha: true });
+            
+            rendererA.setSize(window.innerWidth, window.innerHeight);
+            rendererB.setSize(window.innerWidth, window.innerHeight);
+            rendererA.setPixelRatio(window.devicePixelRatio);
+            rendererB.setPixelRatio(window.devicePixelRatio);
+            
+            window.splitRenderers = { rendererA, rendererB };
+        }
 
         function updateSplitView() {
             if (displayMode !== 'split' || !dropInViewerA || !dropInViewerB) return;
@@ -2818,53 +2851,38 @@
             const splitX = splitPosition * width;
             
             if (isARActive) {
-                // AR模式：使用双渲染目标 + CSS遮罩实现卷帘效果
-                if (!renderTargetA || !renderTargetB) return;
+                // AR模式：使用双canvas + CSS clip-path实现卷帘效果
+                const { rendererA, rendererB } = window.splitRenderers || {};
                 
-                // 确保渲染目标尺寸正确
-                if (renderTargetA.width !== width || renderTargetA.height !== height) {
-                    renderTargetA.setSize(width, height);
-                }
-                if (renderTargetB.width !== width || renderTargetB.height !== height) {
-                    renderTargetB.setSize(width, height);
+                if (rendererA && rendererB) {
+                    // 渲染模型A到canvasA
+                    dropInViewerA.visible = true;
+                    dropInViewerB.visible = false;
+                    rendererA.render(scene, camera);
+                    
+                    // 渲染模型B到canvasB
+                    dropInViewerA.visible = false;
+                    dropInViewerB.visible = true;
+                    rendererB.render(scene, camera);
+                    
+                    // 恢复两个模型的可见性
+                    dropInViewerA.visible = true;
+                    dropInViewerB.visible = true;
+                    
+                    // 更新CSS clip-path
+                    const canvasA = document.getElementById('split-canvas-a');
+                    const canvasB = document.getElementById('split-canvas-b');
+                    
+                    if (canvasA) {
+                        canvasA.style.clipPath = `inset(0 ${width - splitX}px 0 0)`;
+                    }
+                    if (canvasB) {
+                        canvasB.style.clipPath = `inset(0 0 0 ${splitX}px)`;
+                    }
                 }
                 
-                // 渲染场景A（模型A）到渲染目标A
-                dropInViewerA.visible = true;
-                dropInViewerB.visible = false;
-                renderer.setRenderTarget(renderTargetA);
+                // 同时渲染完整场景到主canvas（背景）
                 renderer.render(scene, camera);
-                
-                // 渲染场景B（模型B）到渲染目标B
-                dropInViewerA.visible = false;
-                dropInViewerB.visible = true;
-                renderer.setRenderTarget(renderTargetB);
-                renderer.render(scene, camera);
-                
-                // 恢复两个模型的可见性
-                dropInViewerA.visible = true;
-                dropInViewerB.visible = true;
-                
-                // 更新CSS遮罩层位置
-                updateSplitOverlay(splitX);
-                
-                // 渲染合成结果到屏幕
-                renderer.setRenderTarget(null);
-                
-                // 创建合成场景（如果不存在）
-                if (!window.splitScene) {
-                    createSplitCompositeScene();
-                }
-                
-                // 更新着色器的分割位置
-                window.splitMaterial.uniforms.splitPosition.value = splitPosition;
-                
-                // 更新纹理引用
-                window.splitPlane.material.uniforms.textureA.value = renderTargetA.texture;
-                window.splitPlane.material.uniforms.textureB.value = renderTargetB.texture;
-                
-                // 渲染合成平面
-                renderer.render(window.splitScene, window.splitCamera);
             } else {
                 // 桌面模式：使用渲染目标实现卷帘效果
                 if (!renderTargetA || !renderTargetB) return;
