@@ -2591,28 +2591,43 @@
             }
         }
 
-        async function loadDualModels(modelPathA, modelPathB, parentGroup) {
-            console.log('开始加载双模型:', modelPathA, modelPathB);
+        function cleanupSplitResources() {
+            // 清理AR模式的canvas覆盖层
+            const canvasA = document.getElementById('split-canvas-a');
+            const canvasB = document.getElementById('split-canvas-b');
+            if (canvasA) {
+                canvasA.remove();
+            }
+            if (canvasB) {
+                canvasB.remove();
+            }
             
-            // 清理旧模型和渲染目标
-            if (dropInViewerA) {
-                if (arAnchor) arAnchor.remove(dropInViewerA);
-                else scene.remove(dropInViewerA);
-                dropInViewerA.dispose();
-                dropInViewerA = null;
+            // 清理AR模式的渲染器
+            if (window.splitRenderers) {
+                if (window.splitRenderers.rendererA) {
+                    window.splitRenderers.rendererA.dispose();
+                }
+                if (window.splitRenderers.rendererB) {
+                    window.splitRenderers.rendererB.dispose();
+                }
+                window.splitRenderers = null;
             }
-            if (dropInViewerB) {
-                if (arAnchor) arAnchor.remove(dropInViewerB);
-                else scene.remove(dropInViewerB);
-                dropInViewerB.dispose();
-                dropInViewerB = null;
+            
+            // 清理桌面模式的合成场景
+            if (window.splitScene) {
+                if (window.splitPlane) {
+                    window.splitPlane.geometry.dispose();
+                    if (window.splitMaterial) {
+                        window.splitMaterial.dispose();
+                    }
+                    window.splitPlane = null;
+                }
+                window.splitScene = null;
+                window.splitCamera = null;
+                window.splitMaterial = null;
             }
-            if (dropInViewer) {
-                if (arAnchor) arAnchor.remove(dropInViewer);
-                else scene.remove(dropInViewer);
-                dropInViewer.dispose();
-                dropInViewer = null;
-            }
+            
+            // 清理渲染目标
             if (renderTargetA) {
                 renderTargetA.dispose();
                 renderTargetA = null;
@@ -2620,6 +2635,45 @@
             if (renderTargetB) {
                 renderTargetB.dispose();
                 renderTargetB = null;
+            }
+        }
+
+        async function loadDualModels(modelPathA, modelPathB, parentGroup) {
+            console.log('开始加载双模型:', modelPathA, modelPathB);
+            
+            // 清理所有相关资源（包括AR模式的canvas、渲染器、桌面模式的合成场景等）
+            cleanupSplitResources();
+            
+            // 清理旧模型
+            if (dropInViewerA) {
+                if (arAnchor) arAnchor.remove(dropInViewerA);
+                else scene.remove(dropInViewerA);
+                if (dropInViewerA.children.length > 0) {
+                    const viewer = dropInViewerA.children[0];
+                    if (viewer.dispose) {
+                        viewer.dispose();
+                    }
+                }
+                dropInViewerA = null;
+            }
+            if (dropInViewerB) {
+                if (arAnchor) arAnchor.remove(dropInViewerB);
+                else scene.remove(dropInViewerB);
+                if (dropInViewerB.children.length > 0) {
+                    const viewer = dropInViewerB.children[0];
+                    if (viewer.dispose) {
+                        viewer.dispose();
+                    }
+                }
+                dropInViewerB = null;
+            }
+            if (dropInViewer) {
+                if (arAnchor) arAnchor.remove(dropInViewer);
+                else scene.remove(dropInViewer);
+                if (dropInViewer.dispose) {
+                    dropInViewer.dispose();
+                }
+                dropInViewer = null;
             }
             
             try {
