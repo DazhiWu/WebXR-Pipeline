@@ -1114,6 +1114,8 @@
         let dropInViewerB = null;  // 模型B的DropInViewer
         let splitPosition = 0.5;  // 分割线位置 (0-1)
         let isDragging = false;  // 是否正在拖动分割线
+        let renderTargetA = null;  // 模型A的渲染目标
+        let renderTargetB = null;  // 模型B的渲染目标
 
         // 校准参数
         let calibration = {
@@ -2157,6 +2159,12 @@
                 if (selectedModelPath) {
                     await loadPlyModel(selectedModelPath, arAnchor);
                 }
+                
+                // 如果是卷帘对比模式且已选择两个模型
+                if (displayMode === 'split' && selectedModelPathA && selectedModelPathB) {
+                    await loadDualModels(selectedModelPathA, selectedModelPathB, arAnchor);
+                    createSplitLine();
+                }
             } else {
                 // AR管道模式：创建管网
                 createPipelines();
@@ -2567,7 +2575,7 @@
         async function loadDualModels(modelPathA, modelPathB, parentGroup) {
             console.log('开始加载双模型:', modelPathA, modelPathB);
             
-            // 清理旧模型
+            // 清理旧模型和渲染目标
             if (dropInViewerA) {
                 if (arAnchor) arAnchor.remove(dropInViewerA);
                 else scene.remove(dropInViewerA);
@@ -2586,6 +2594,14 @@
                 dropInViewer.dispose();
                 dropInViewer = null;
             }
+            if (renderTargetA) {
+                renderTargetA.dispose();
+                renderTargetA = null;
+            }
+            if (renderTargetB) {
+                renderTargetB.dispose();
+                renderTargetB = null;
+            }
             
             try {
                 const GaussianSplats3D = window['Gaussian Splats 3D'];
@@ -2595,8 +2611,28 @@
                     return;
                 }
                 
+                // 创建渲染目标
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+                renderTargetA = new THREE.WebGLRenderTarget(width, height, {
+                    minFilter: THREE.LinearFilter,
+                    magFilter: THREE.LinearFilter,
+                    format: THREE.RGBAFormat,
+                    colorSpace: THREE.SRGBColorSpace
+                });
+                renderTargetB = new THREE.WebGLRenderTarget(width, height, {
+                    minFilter: THREE.LinearFilter,
+                    magFilter: THREE.LinearFilter,
+                    format: THREE.RGBAFormat,
+                    colorSpace: THREE.SRGBColorSpace
+                });
+                
+                // 创建两个Group分别存放模型
+                dropInViewerA = new THREE.Group();
+                dropInViewerB = new THREE.Group();
+                
                 // 加载模型A
-                dropInViewerA = new GaussianSplats3D.DropInViewer({
+                const viewerA = new GaussianSplats3D.DropInViewer({
                     gpuAcceleratedSort: false,
                     integerBasedSort: false,
                     selfDrivenMode: true,
@@ -2604,18 +2640,19 @@
                     camera: camera,
                     sharedMemoryForWorkers: false
                 });
+                dropInViewerA.add(viewerA);
                 parentGroup.add(dropInViewerA);
                 
-                await dropInViewerA.addSplatScene(modelPathA, {
+                await viewerA.addSplatScene(modelPathA, {
                     position: [0, -1, 0],
                     scale: [1, 1, 1],
                     showLoadingUI: false,
                     splatAlphaRemovalThreshold: 5
                 });
-                dropInViewerA.rotation.x = -Math.PI;
+                viewerA.rotation.x = -Math.PI;
                 
                 // 加载模型B
-                dropInViewerB = new GaussianSplats3D.DropInViewer({
+                const viewerB = new GaussianSplats3D.DropInViewer({
                     gpuAcceleratedSort: false,
                     integerBasedSort: false,
                     selfDrivenMode: true,
@@ -2623,15 +2660,22 @@
                     camera: camera,
                     sharedMemoryForWorkers: false
                 });
+                dropInViewerB.add(viewerB);
                 parentGroup.add(dropInViewerB);
                 
-                await dropInViewerB.addSplatScene(modelPathB, {
+                await viewerB.addSplatScene(modelPathB, {
                     position: [0, -1, 0],
                     scale: [1, 1, 1],
                     showLoadingUI: false,
                     splatAlphaRemovalThreshold: 5
                 });
-                dropInViewerB.rotation.x = -Math.PI;
+                viewerB.rotation.x = -Math.PI;
+                
+                // 确保两个模型在同一位置
+                dropInViewerA.position.set(0, 0, 0);
+                dropInViewerB.position.set(0, 0, 0);
+                dropInViewerA.scale.set(1, 1, 1);
+                dropInViewerB.scale.set(1, 1, 1);
                 
                 splatLoaded = true;
                 console.log('双模型加载成功');
@@ -2693,47 +2737,97 @@
         }
 
         function updateSplitView() {
-            if (displayMode !== 'split' || !dropInViewerA || !dropInViewerB) return;
+            if (displayMode !== 'split' || !dropInViewerA || !dropInViewerB || !renderTargetA || !renderTargetB) return;
             
             const width = window.innerWidth;
-            const splitX = splitPosition * width;
+            const height = window.innerHeight;
             
-            // 先清除画布
-            renderer.clear();
-            
-            // 通过调整scissorRect来实现卷帘效果
-            renderer.setScissorTest(true);
-            
-            // 渲染模型A（左侧）
-            // 先隐藏模型B
-            if (dropInViewerB.parent) {
-                dropInViewerB.visible = false;
+            // 确保渲染目标尺寸正确
+            if (renderTargetA.width !== width || renderTargetA.height !== height) {
+                renderTargetA.setSize(width, height);
             }
-            renderer.setScissor(0, 0, splitX, window.innerHeight);
-            renderer.setViewport(0, 0, splitX, window.innerHeight);
+            if (renderTargetB.width !== width || renderTargetB.height !== height) {
+                renderTargetB.setSize(width, height);
+            }
+            
+            // 渲染场景A（网格地面 + 模型A）到渲染目标A
+            dropInViewerA.visible = true;
+            dropInViewerB.visible = false;
+            renderer.setRenderTarget(renderTargetA);
             renderer.render(scene, camera);
             
-            // 渲染模型B（右侧）
-            // 隐藏模型A，显示模型B
-            if (dropInViewerA.parent) {
-                dropInViewerA.visible = false;
-            }
-            if (dropInViewerB.parent) {
-                dropInViewerB.visible = true;
-            }
-            renderer.setScissor(splitX, 0, width - splitX, window.innerHeight);
-            renderer.setViewport(splitX, 0, width - splitX, window.innerHeight);
+            // 渲染场景B（网格地面 + 模型B）到渲染目标B
+            dropInViewerA.visible = false;
+            dropInViewerB.visible = true;
+            renderer.setRenderTarget(renderTargetB);
             renderer.render(scene, camera);
             
             // 恢复两个模型的可见性
-            if (dropInViewerA.parent) {
-                dropInViewerA.visible = true;
-            }
-            if (dropInViewerB.parent) {
-                dropInViewerB.visible = true;
+            dropInViewerA.visible = true;
+            
+            // 创建合成场景（如果不存在）
+            if (!window.splitScene) {
+                createSplitCompositeScene();
             }
             
-            renderer.setScissorTest(false);
+            // 更新着色器的分割位置
+            window.splitMaterial.uniforms.splitPosition.value = splitPosition;
+            
+            // 渲染合成结果到屏幕
+            renderer.setRenderTarget(null);
+            renderer.clear();
+            
+            // 更新纹理引用
+            window.splitPlane.material.uniforms.textureA.value = renderTargetA.texture;
+            window.splitPlane.material.uniforms.textureB.value = renderTargetB.texture;
+            
+            // 渲染合成平面
+            renderer.render(window.splitScene, window.splitCamera);
+        }
+        
+        function createSplitCompositeScene() {
+            window.splitScene = new THREE.Scene();
+            window.splitCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            
+            const vertexShader = `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `;
+            
+            const fragmentShader = `
+                uniform sampler2D textureA;
+                uniform sampler2D textureB;
+                uniform float splitPosition;
+                varying vec2 vUv;
+                
+                void main() {
+                    vec4 colorA = texture2D(textureA, vUv);
+                    vec4 colorB = texture2D(textureB, vUv);
+                    
+                    if (vUv.x < splitPosition) {
+                        gl_FragColor = colorA;
+                    } else {
+                        gl_FragColor = colorB;
+                    }
+                }
+            `;
+            
+            window.splitMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    textureA: { value: null },
+                    textureB: { value: null },
+                    splitPosition: { value: 0.5 }
+                },
+                vertexShader: vertexShader,
+                fragmentShader: fragmentShader
+            });
+            
+            const geometry = new THREE.PlaneGeometry(2, 2);
+            window.splitPlane = new THREE.Mesh(geometry, window.splitMaterial);
+            window.splitScene.add(window.splitPlane);
         }
 
         // ==================== 模块选择功能 ====================
@@ -2769,6 +2863,7 @@
             
             if (mode === 'ar') {
                 // AR模式 - 先显示模式选择界面
+                isDesktopMode = false;
                 if (!navigator.xr) {
                     showOverlay('❌', '设备不支持WebXR', '请使用支持WebXR的浏览器');
                     return;
@@ -2781,6 +2876,7 @@
                 document.getElementById('display-mode-overlay').classList.remove('hidden');
             } else if (mode === 'desktop') {
                 // 桌面测试模式 - 先显示模式选择界面
+                isDesktopMode = true;
                 document.getElementById('display-mode-overlay').classList.remove('hidden');
             }
         }
@@ -2789,9 +2885,12 @@
             displayMode = mode;
             document.getElementById('display-mode-overlay').classList.add('hidden');
             
-            // 桌面模式下先初始化桌面环境
-            if (!isARActive) {
+            // 只有桌面模式才初始化桌面环境
+            if (isDesktopMode) {
                 startDesktopTest();
+            } else {
+                // AR模式：启动AR环境
+                startPlyAR();
             }
             
             if (displayMode === 'single') {
