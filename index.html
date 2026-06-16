@@ -2054,9 +2054,15 @@
                 // 隐藏加载遮罩
                 overlay.classList.add('hidden');
                 
-                // PLY模式：直接显示模型选择界面，不显示扫描提示
+                // PLY模式：根据显示模式显示相应的模型选择界面
                 if (isPlyMode) {
-                    modelSelectOverlay.classList.remove('hidden');
+                    if (displayMode === 'split') {
+                        // 卷帘对比模式：显示双模型选择界面
+                        openDualModelSelect();
+                    } else {
+                        // 单模型模式：显示单个模型选择界面
+                        modelSelectOverlay.classList.remove('hidden');
+                    }
                 } else {
                     // 管道模式显示扫描提示
                     instructions.style.display = 'block';
@@ -2737,52 +2743,86 @@
         }
 
         function updateSplitView() {
-            if (displayMode !== 'split' || !dropInViewerA || !dropInViewerB || !renderTargetA || !renderTargetB) return;
+            if (displayMode !== 'split' || !dropInViewerA || !dropInViewerB) return;
             
             const width = window.innerWidth;
-            const height = window.innerHeight;
+            const splitX = splitPosition * width;
             
-            // 确保渲染目标尺寸正确
-            if (renderTargetA.width !== width || renderTargetA.height !== height) {
-                renderTargetA.setSize(width, height);
+            if (isARActive) {
+                // AR模式：使用scissor test实现卷帘效果
+                // 先渲染完整场景（相机画面 + 地面 + 两个模型）
+                renderer.render(scene, camera);
+                
+                // 使用scissor test分别渲染两个模型的局部区域
+                renderer.setScissorTest(true);
+                
+                // 渲染模型A（左侧）
+                dropInViewerA.visible = true;
+                dropInViewerB.visible = false;
+                renderer.setScissor(0, 0, splitX, window.innerHeight);
+                renderer.setViewport(0, 0, splitX, window.innerHeight);
+                renderer.render(scene, camera);
+                
+                // 渲染模型B（右侧）
+                dropInViewerA.visible = false;
+                dropInViewerB.visible = true;
+                renderer.setScissor(splitX, 0, width - splitX, window.innerHeight);
+                renderer.setViewport(splitX, 0, width - splitX, window.innerHeight);
+                renderer.render(scene, camera);
+                
+                // 恢复两个模型的可见性
+                dropInViewerA.visible = true;
+                dropInViewerB.visible = true;
+                
+                renderer.setScissorTest(false);
+            } else {
+                // 桌面模式：使用渲染目标实现卷帘效果
+                if (!renderTargetA || !renderTargetB) return;
+                
+                const height = window.innerHeight;
+                
+                // 确保渲染目标尺寸正确
+                if (renderTargetA.width !== width || renderTargetA.height !== height) {
+                    renderTargetA.setSize(width, height);
+                }
+                if (renderTargetB.width !== width || renderTargetB.height !== height) {
+                    renderTargetB.setSize(width, height);
+                }
+                
+                // 渲染场景A（网格地面 + 模型A）到渲染目标A
+                dropInViewerA.visible = true;
+                dropInViewerB.visible = false;
+                renderer.setRenderTarget(renderTargetA);
+                renderer.render(scene, camera);
+                
+                // 渲染场景B（网格地面 + 模型B）到渲染目标B
+                dropInViewerA.visible = false;
+                dropInViewerB.visible = true;
+                renderer.setRenderTarget(renderTargetB);
+                renderer.render(scene, camera);
+                
+                // 恢复两个模型的可见性
+                dropInViewerA.visible = true;
+                
+                // 创建合成场景（如果不存在）
+                if (!window.splitScene) {
+                    createSplitCompositeScene();
+                }
+                
+                // 更新着色器的分割位置
+                window.splitMaterial.uniforms.splitPosition.value = splitPosition;
+                
+                // 渲染合成结果到屏幕
+                renderer.setRenderTarget(null);
+                renderer.clear();
+                
+                // 更新纹理引用
+                window.splitPlane.material.uniforms.textureA.value = renderTargetA.texture;
+                window.splitPlane.material.uniforms.textureB.value = renderTargetB.texture;
+                
+                // 渲染合成平面
+                renderer.render(window.splitScene, window.splitCamera);
             }
-            if (renderTargetB.width !== width || renderTargetB.height !== height) {
-                renderTargetB.setSize(width, height);
-            }
-            
-            // 渲染场景A（网格地面 + 模型A）到渲染目标A
-            dropInViewerA.visible = true;
-            dropInViewerB.visible = false;
-            renderer.setRenderTarget(renderTargetA);
-            renderer.render(scene, camera);
-            
-            // 渲染场景B（网格地面 + 模型B）到渲染目标B
-            dropInViewerA.visible = false;
-            dropInViewerB.visible = true;
-            renderer.setRenderTarget(renderTargetB);
-            renderer.render(scene, camera);
-            
-            // 恢复两个模型的可见性
-            dropInViewerA.visible = true;
-            
-            // 创建合成场景（如果不存在）
-            if (!window.splitScene) {
-                createSplitCompositeScene();
-            }
-            
-            // 更新着色器的分割位置
-            window.splitMaterial.uniforms.splitPosition.value = splitPosition;
-            
-            // 渲染合成结果到屏幕
-            renderer.setRenderTarget(null);
-            renderer.clear();
-            
-            // 更新纹理引用
-            window.splitPlane.material.uniforms.textureA.value = renderTargetA.texture;
-            window.splitPlane.material.uniforms.textureB.value = renderTargetB.texture;
-            
-            // 渲染合成平面
-            renderer.render(window.splitScene, window.splitCamera);
         }
         
         function createSplitCompositeScene() {
