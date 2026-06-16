@@ -2855,17 +2855,22 @@
                 const { rendererA, rendererB } = window.splitRenderers || {};
                 
                 if (rendererA && rendererB) {
-                    // 渲染模型A到canvasA
+                    // 主canvas：只渲染相机画面（隐藏两个模型）
+                    dropInViewerA.visible = false;
+                    dropInViewerB.visible = false;
+                    renderer.render(scene, camera);
+                    
+                    // 渲染模型A到canvasA（左侧）
                     dropInViewerA.visible = true;
                     dropInViewerB.visible = false;
                     rendererA.render(scene, camera);
                     
-                    // 渲染模型B到canvasB
+                    // 渲染模型B到canvasB（右侧）
                     dropInViewerA.visible = false;
                     dropInViewerB.visible = true;
                     rendererB.render(scene, camera);
                     
-                    // 恢复两个模型的可见性
+                    // 恢复两个模型的可见性（供下一次渲染使用）
                     dropInViewerA.visible = true;
                     dropInViewerB.visible = true;
                     
@@ -2879,10 +2884,10 @@
                     if (canvasB) {
                         canvasB.style.clipPath = `inset(0 0 0 ${splitX}px)`;
                     }
+                } else {
+                    // 备用方案：直接渲染完整场景
+                    renderer.render(scene, camera);
                 }
-                
-                // 同时渲染完整场景到主canvas（背景）
-                renderer.render(scene, camera);
             } else {
                 // 桌面模式：使用渲染目标实现卷帘效果
                 if (!renderTargetA || !renderTargetB) return;
