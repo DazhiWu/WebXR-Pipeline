@@ -810,6 +810,94 @@
         .split-line.hidden {
             display: none;
         }
+
+        /* 测量工具样式 */
+        #measure-toolbar {
+            position: fixed;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 12px 20px;
+            border-radius: 12px;
+            z-index: 1000;
+            display: none;
+            flex-direction: row;
+            align-items: center;
+            gap: 15px;
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #measure-toolbar.show {
+            display: flex;
+        }
+
+        .measure-label {
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        .measure-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #4ade80;
+            min-width: 100px;
+            text-align: center;
+        }
+
+        #measure-clear-btn {
+            padding: 6px 14px;
+            background: rgba(239, 68, 68, 0.3);
+            border: 1px solid rgba(239, 68, 68, 0.5);
+            border-radius: 8px;
+            color: #fca5a5;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        #measure-clear-btn:hover {
+            background: rgba(239, 68, 68, 0.5);
+        }
+
+        #measure-instructions {
+            position: fixed;
+            bottom: 80px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 13px;
+            z-index: 998;
+            pointer-events: none;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        #ply-editor-back-btn {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            padding: 10px 18px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s ease;
+            display: none;
+        }
+
+        #ply-editor-back-btn.show {
+            display: block;
+        }
+
+        #ply-editor-back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
     </style>
 </head>
 <body>
@@ -951,6 +1039,12 @@
             <div class="module-name">AR管道</div>
             <div class="module-desc">基于真实地理位置的地下管网AR可视化</div>
         </div>
+
+        <div class="module-card" id="ply-editor-module-card">
+            <div class="module-icon">✏️</div>
+            <div class="module-name">PLY编辑模式</div>
+            <div class="module-desc">加载PLY模型并进行测量编辑，支持线段测量</div>
+        </div>
     </div>
 
     <!-- PLY子功能选择界面 -->
@@ -1074,6 +1168,20 @@
     <!-- 模型切换按钮 -->
     <button id="model-switch-btn">切换模型</button>
 
+    <!-- PLY编辑模式返回按钮 -->
+    <button id="ply-editor-back-btn">← 返回模块选择</button>
+
+    <!-- 测量工具栏 -->
+    <div id="measure-toolbar">
+        <span class="measure-label">测量长度:</span>
+        <span class="measure-value" id="measure-length">--</span>
+        <span class="measure-label">m</span>
+        <button id="measure-clear-btn">清除测量</button>
+    </div>
+
+    <!-- 测量操作指引 -->
+    <div id="measure-instructions">点击模型表面添加测量点（最多2个点）</div>
+
     <!-- 引入Three.js和相关库 -->
     <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
     <script src="libs/gaussian-splats-3d.umd.cjs"></script>
@@ -1118,6 +1226,13 @@
         let renderTargetB = null;  // 模型B的渲染目标
         let clipPlaneA = null;  // 模型A的裁剪平面（AR模式）
         let clipPlaneB = null;  // 模型B的裁剪平面（AR模式）
+
+        // PLY编辑模式相关变量
+        let isPlyEditorMode = false;  // 是否处于PLY编辑模式
+        let measurePoints = [];  // 测量点数组
+        let measureLine = null;  // 测量线对象
+        let measurePointMarkers = [];  // 测量点标记对象
+        let measureGroup = null;  // 测量元素组
 
         // 校准参数
         let calibration = {
@@ -2088,6 +2203,23 @@
             instructions.style.display = 'none';
             pipelineGroup.visible = false;
             
+            // 清理测量工具
+            document.getElementById('measure-toolbar').classList.remove('show');
+            document.getElementById('measure-instructions').style.display = 'none';
+            renderer.domElement.removeEventListener('click', handleMeasureClick);
+            renderer.domElement.removeEventListener('touchstart', handleMeasureClick);
+            
+            if (measureGroup) {
+                scene.remove(measureGroup);
+                measureGroup = null;
+            }
+            measurePoints = [];
+            measurePointMarkers = [];
+            if (measureLine) {
+                measureLine.visible = false;
+            }
+            document.getElementById('measure-length').textContent = '--';
+            
             // 清理高斯泼溅模型
             if (dropInViewer) {
                 if (arAnchor) {
@@ -2167,8 +2299,15 @@
                 // 如果已选择模型，加载模型到锚点位置
                 if (selectedModelPath) {
                     await loadPlyModel(selectedModelPath, arAnchor);
-                    instructions.textContent = '点击模型查看详情';
+                    instructions.textContent = '点击模型添加测量点';
                     reticle.visible = false;
+                    
+                    initMeasureTool();
+                    document.getElementById('measure-toolbar').classList.add('show');
+                    document.getElementById('measure-instructions').style.display = 'block';
+                    
+                    renderer.domElement.addEventListener('click', handleMeasureClick);
+                    renderer.domElement.addEventListener('touchstart', handleMeasureClick);
                 }
                 
                 // 如果是卷帘对比模式且已选择两个模型
@@ -2390,6 +2529,133 @@
                 renderer.render(scene, camera);
             }
         }
+
+        // ==================== 测量工具功能 ====================
+        function initMeasureTool() {
+            measureGroup = new THREE.Group();
+            scene.add(measureGroup);
+
+            const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(1, 0, 0)
+            ]);
+            const lineMaterial = new THREE.LineBasicMaterial({
+                color: 0x4ade80,
+                linewidth: 2,
+                transparent: true,
+                opacity: 0.9
+            });
+            measureLine = new THREE.Line(lineGeometry, lineMaterial);
+            measureLine.visible = false;
+            measureGroup.add(measureLine);
+        }
+
+        function addMeasurePoint(position) {
+            if (measurePoints.length >= 2) {
+                clearMeasurements();
+            }
+
+            measurePoints.push(position.clone());
+
+            const markerGeometry = new THREE.SphereGeometry(0.02, 16, 16);
+            const markerMaterial = new THREE.MeshBasicMaterial({
+                color: measurePoints.length === 1 ? 0x3b82f6 : 0xef4444
+            });
+            const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+            marker.position.copy(position);
+            measureGroup.add(marker);
+            measurePointMarkers.push(marker);
+
+            updateMeasureLine();
+        }
+
+        function updateMeasureLine() {
+            if (measurePoints.length === 2) {
+                measureLine.geometry.setFromPoints(measurePoints);
+                measureLine.visible = true;
+
+                const distance = measurePoints[0].distanceTo(measurePoints[1]);
+                document.getElementById('measure-length').textContent = distance.toFixed(3);
+            } else if (measurePoints.length === 1) {
+                measureLine.visible = false;
+                document.getElementById('measure-length').textContent = '--';
+            }
+        }
+
+        function clearMeasurements() {
+            measurePoints.forEach(() => {
+                const marker = measurePointMarkers.pop();
+                if (marker) {
+                    measureGroup.remove(marker);
+                    marker.geometry.dispose();
+                    marker.material.dispose();
+                }
+            });
+            measurePoints = [];
+            measureLine.visible = false;
+            document.getElementById('measure-length').textContent = '--';
+        }
+
+        function handleMeasureClick(event) {
+            if (!dropInViewer) return;
+
+            if (!isPlyEditorMode && !isARActive) return;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+            const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+            const pixelX = clientX - rect.left;
+            const pixelY = clientY - rect.top;
+
+            const viewer = dropInViewer.viewer;
+            const splatMesh = viewer ? viewer.splatMesh : null;
+            const viewerRaycaster = viewer ? viewer.raycaster : null;
+
+            if (splatMesh && viewerRaycaster && viewer.camera) {
+                const renderDimensions = new THREE.Vector2(rect.width, rect.height);
+                const outHits = [];
+
+                viewerRaycaster.setFromCameraAndScreenPosition(viewer.camera, new THREE.Vector2(pixelX, pixelY), renderDimensions);
+                viewerRaycaster.intersectSplatMesh(splatMesh, outHits);
+
+                if (outHits.length > 0) {
+                    const hit = outHits[0];
+                    const point = hit.origin.clone();
+                    addMeasurePoint(point);
+                    event.stopPropagation();
+                }
+            } else {
+                pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+                pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+
+                raycaster.setFromCamera(pointer, camera);
+
+                let intersects = [];
+                if (dropInViewer instanceof THREE.Group) {
+                    dropInViewer.traverse((child) => {
+                        if (child instanceof THREE.Mesh) {
+                            const childIntersects = raycaster.intersectObject(child);
+                            intersects = intersects.concat(childIntersects);
+                        }
+                    });
+                } else if (dropInViewer.children && dropInViewer.children.length > 0) {
+                    dropInViewer.children[0].traverse((child) => {
+                        if (child instanceof THREE.Mesh) {
+                            const childIntersects = raycaster.intersectObject(child);
+                            intersects = intersects.concat(childIntersects);
+                        }
+                    });
+                }
+
+                if (intersects.length > 0) {
+                    intersects.sort((a, b) => a.distance - b.distance);
+                    const point = intersects[0].point;
+                    addMeasurePoint(point);
+                    event.stopPropagation();
+                }
+            }
+        }
         
         // ==================== PLY模型加载功能 ====================
         async function loadPlyModel(modelPath, parentGroup) {
@@ -2486,15 +2752,21 @@
             
             modelSelectOverlay.classList.add('hidden');
             
-            if (isARActive && !arAnchor) {
-                // AR模式已启动但未检测到地面：显示扫描提示，等待地面检测
+            if (isPlyEditorMode) {
+                await loadPlyModel(selectedModelPath, scene);
+                
+                if (controls) {
+                    camera.position.set(8, 6, 8);
+                    camera.lookAt(0, 1, 0);
+                }
+                
+                document.getElementById('measure-instructions').style.display = 'block';
+            } else if (isARActive && !arAnchor) {
                 instructions.style.display = 'block';
                 instructions.textContent = '移动手机扫描地面';
             } else if (!isDesktopMode && !isARActive) {
-                // AR模式但AR还未启动：启动AR环境
                 startPlyAR();
             } else {
-                // 桌面模式或已检测到地面：直接加载模型
                 let parentGroup = scene;
                 if (arAnchor) {
                     parentGroup = arAnchor;
@@ -3060,7 +3332,72 @@
                 overlayIcon.textContent = '📍';
                 overlayTitle.textContent = '正在获取位置信息';
                 overlayText.textContent = '请允许浏览器获取您的位置权限';
+            } else if (module === 'ply-editor') {
+                // PLY编辑模式
+                startPlyEditorMode();
             }
+        }
+
+        // ==================== PLY编辑模式功能 ====================
+        function startPlyEditorMode() {
+            isPlyEditorMode = true;
+            isPlyMode = false;
+            isDesktopMode = true;
+            isARActive = false;
+            
+            moduleSelectOverlay.classList.add('hidden');
+            locationBar.style.display = 'none';
+            arButton.style.display = 'none';
+            overlay.classList.add('hidden');
+            
+            document.getElementById('ply-editor-back-btn').classList.add('show');
+            document.getElementById('measure-toolbar').classList.add('show');
+            
+            controls = createOrbitControls(camera, renderer.domElement);
+            createGridFloor();
+            
+            camera.position.set(10, 10, 10);
+            camera.lookAt(0, 0, 0);
+            
+            initMeasureTool();
+            
+            renderer.domElement.addEventListener('click', handleMeasureClick);
+            renderer.domElement.addEventListener('touchstart', handleMeasureClick);
+            
+            openModelSelect();
+            
+            renderer.setAnimationLoop(desktopRender);
+        }
+
+        function exitPlyEditorMode() {
+            isPlyEditorMode = false;
+            isDesktopMode = false;
+            
+            document.getElementById('ply-editor-back-btn').classList.remove('show');
+            document.getElementById('measure-toolbar').classList.remove('show');
+            document.getElementById('measure-instructions').style.display = 'none';
+            
+            clearMeasurements();
+            if (measureGroup) {
+                scene.remove(measureGroup);
+                measureGroup = null;
+            }
+            
+            renderer.domElement.removeEventListener('click', handleMeasureClick);
+            renderer.domElement.removeEventListener('touchstart', handleMeasureClick);
+            
+            if (dropInViewer) {
+                scene.remove(dropInViewer);
+                dropInViewer.dispose();
+                dropInViewer = null;
+            }
+            
+            controls = null;
+            
+            renderer.setAnimationLoop(null);
+            
+            moduleSelectOverlay.classList.remove('hidden');
+            locationBar.style.display = 'flex';
         }
 
         function selectPlyMode(mode) {
@@ -3178,6 +3515,7 @@
             // 模块选择事件
             plyModuleCard.addEventListener('click', () => selectModule('ply'));
             pipelineModuleCard.addEventListener('click', () => selectModule('pipeline'));
+            document.getElementById('ply-editor-module-card').addEventListener('click', () => selectModule('ply-editor'));
             plyBackBtn.addEventListener('click', () => {
                 plySubmenuOverlay.classList.add('hidden');
                 moduleSelectOverlay.classList.remove('hidden');
@@ -3245,6 +3583,10 @@
             
             // 重新定位按钮点击事件
             recenterBtn.addEventListener('click', recenterLocation);
+            
+            // PLY编辑模式事件
+            document.getElementById('ply-editor-back-btn').addEventListener('click', exitPlyEditorMode);
+            document.getElementById('measure-clear-btn').addEventListener('click', clearMeasurements);
             
             // 坐标系选择事件
             coordSystemSelect.addEventListener('change', (e) => {
