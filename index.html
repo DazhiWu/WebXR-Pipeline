@@ -2206,8 +2206,11 @@
             // 清理测量工具
             document.getElementById('measure-toolbar').classList.remove('show');
             document.getElementById('measure-instructions').style.display = 'none';
-            renderer.domElement.removeEventListener('click', handleMeasureClick);
-            renderer.domElement.removeEventListener('touchstart', handleMeasureClick);
+            if ('ontouchstart' in window) {
+                renderer.domElement.removeEventListener('touchstart', handleMeasureClick);
+            } else {
+                renderer.domElement.removeEventListener('click', handleMeasureClick);
+            }
             
             if (measureGroup) {
                 scene.remove(measureGroup);
@@ -2306,8 +2309,11 @@
                     document.getElementById('measure-toolbar').classList.add('show');
                     document.getElementById('measure-instructions').style.display = 'block';
                     
-                    renderer.domElement.addEventListener('click', handleMeasureClick);
-                    renderer.domElement.addEventListener('touchstart', handleMeasureClick);
+                    if ('ontouchstart' in window) {
+                        renderer.domElement.addEventListener('touchstart', handleMeasureClick);
+                    } else {
+                        renderer.domElement.addEventListener('click', handleMeasureClick);
+                    }
                 }
                 
                 // 如果是卷帘对比模式且已选择两个模型
@@ -2600,6 +2606,10 @@
             if (!dropInViewer) return;
 
             if (!isPlyEditorMode && !isARActive) return;
+
+            if (event.type === 'touchstart') {
+                event.preventDefault();
+            }
 
             const rect = renderer.domElement.getBoundingClientRect();
             const clientX = event.touches ? event.touches[0].clientX : event.clientX;
@@ -3361,8 +3371,11 @@
             
             initMeasureTool();
             
-            renderer.domElement.addEventListener('click', handleMeasureClick);
-            renderer.domElement.addEventListener('touchstart', handleMeasureClick);
+            if ('ontouchstart' in window) {
+                renderer.domElement.addEventListener('touchstart', handleMeasureClick);
+            } else {
+                renderer.domElement.addEventListener('click', handleMeasureClick);
+            }
             
             openModelSelect();
             
@@ -3383,8 +3396,11 @@
                 measureGroup = null;
             }
             
-            renderer.domElement.removeEventListener('click', handleMeasureClick);
-            renderer.domElement.removeEventListener('touchstart', handleMeasureClick);
+            if ('ontouchstart' in window) {
+                renderer.domElement.removeEventListener('touchstart', handleMeasureClick);
+            } else {
+                renderer.domElement.removeEventListener('click', handleMeasureClick);
+            }
             
             if (dropInViewer) {
                 scene.remove(dropInViewer);
