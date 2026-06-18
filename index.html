@@ -828,10 +828,37 @@
             gap: 15px;
             color: white;
             border: 1px solid rgba(255, 255, 255, 0.1);
+            flex-wrap: wrap;
+            justify-content: center;
         }
 
         #measure-toolbar.show {
             display: flex;
+        }
+
+        .measure-mode-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 6px 12px;
+            color: white;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .measure-mode-btn:hover,
+        .measure-mode-btn.active {
+            background: rgba(74, 222, 128, 0.3);
+            border-color: rgba(74, 222, 128, 0.6);
+            color: #4ade80;
+        }
+
+        #measure-distance-display,
+        #measure-area-display {
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
 
         .measure-label {
@@ -1173,14 +1200,22 @@
 
     <!-- 测量工具栏 -->
     <div id="measure-toolbar">
-        <span class="measure-label">测量长度:</span>
-        <span class="measure-value" id="measure-length">--</span>
-        <span class="measure-label">m</span>
+        <button id="measure-mode-btn" class="measure-mode-btn">线段测量</button>
+        <div id="measure-distance-display">
+            <span class="measure-label">长度:</span>
+            <span class="measure-value" id="measure-length">--</span>
+            <span class="measure-label">m</span>
+        </div>
+        <div id="measure-area-display">
+            <span class="measure-label">面积:</span>
+            <span class="measure-value" id="measure-area">--</span>
+            <span class="measure-label">m²</span>
+        </div>
         <button id="measure-clear-btn">清除测量</button>
     </div>
 
     <!-- 测量操作指引 -->
-    <div id="measure-instructions">点击模型表面添加测量点（最多2个点）</div>
+    <div id="measure-instructions">点击模型表面添加测量点</div>
 
     <!-- 引入Three.js和相关库 -->
     <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
@@ -1231,6 +1266,8 @@
         let isPlyEditorMode = false;  // 是否处于PLY编辑模式
         let measurePoints = [];  // 测量点数组
         let measureLine = null;  // 测量线对象
+        let measureAreaMesh = null;  // 面积测量面
+        let measureAreaOutline = null;  // 面积测量轮廓线
         let measurePointMarkers = [];  // 测量点标记对象
         let measureGroup = null;  // 测量元素组
 
@@ -2537,6 +2574,8 @@
         }
 
         // ==================== 测量工具功能 ====================
+        let measureMode = 'distance';
+
         function initMeasureTool() {
             measureGroup = new THREE.Group();
             scene.add(measureGroup);
@@ -2554,38 +2593,159 @@
             measureLine = new THREE.Line(lineGeometry, lineMaterial);
             measureLine.visible = false;
             measureGroup.add(measureLine);
+
+            const areaMaterial = new THREE.MeshBasicMaterial({
+                color: 0x3b82f6,
+                transparent: true,
+                opacity: 0.3,
+                side: THREE.DoubleSide
+            });
+            measureAreaMesh = new THREE.Mesh(new THREE.BufferGeometry(), areaMaterial);
+            measureAreaMesh.visible = false;
+            measureGroup.add(measureAreaMesh);
+
+            const areaOutlineMaterial = new THREE.LineBasicMaterial({
+                color: 0x3b82f6,
+                linewidth: 2,
+                transparent: true,
+                opacity: 0.8
+            });
+            measureAreaOutline = new THREE.LineLoop(new THREE.BufferGeometry(), areaOutlineMaterial);
+            measureAreaOutline.visible = false;
+            measureGroup.add(measureAreaOutline);
+
+            document.getElementById('measure-mode-btn').addEventListener('click', toggleMeasureMode);
+            document.getElementById('measure-clear-btn').addEventListener('click', clearMeasurements);
+
+            updateMeasureModeUI();
+        }
+
+        function toggleMeasureMode() {
+            measureMode = measureMode === 'distance' ? 'area' : 'distance';
+            updateMeasureModeUI();
+            clearMeasurements();
+        }
+
+        function updateMeasureModeUI() {
+            const btn = document.getElementById('measure-mode-btn');
+            const distanceDisplay = document.getElementById('measure-distance-display');
+            const areaDisplay = document.getElementById('measure-area-display');
+            const instructions = document.getElementById('measure-instructions');
+
+            if (measureMode === 'distance') {
+                btn.textContent = '线段测量';
+                btn.classList.remove('active');
+                distanceDisplay.style.display = 'flex';
+                areaDisplay.style.display = 'none';
+                instructions.textContent = '点击模型表面添加测量点（最多2个点）';
+            } else {
+                btn.textContent = '面积测量';
+                btn.classList.add('active');
+                distanceDisplay.style.display = 'none';
+                areaDisplay.style.display = 'flex';
+                instructions.textContent = '点击模型表面添加测量点（至少3个点）';
+            }
         }
 
         function addMeasurePoint(position) {
-            if (measurePoints.length >= 2) {
-                clearMeasurements();
+            if (measureMode === 'distance') {
+                if (measurePoints.length >= 2) {
+                    clearMeasurements();
+                }
             }
 
             measurePoints.push(position.clone());
 
             const markerGeometry = new THREE.SphereGeometry(0.02, 16, 16);
+            const colors = [0x3b82f6, 0xef4444, 0x4ade80, 0xfbbf24, 0xa855f7, 0xec4899];
+            const colorIndex = measureMode === 'distance' 
+                ? (measurePoints.length === 1 ? 0 : 1)
+                : (measurePoints.length - 1) % colors.length;
             const markerMaterial = new THREE.MeshBasicMaterial({
-                color: measurePoints.length === 1 ? 0x3b82f6 : 0xef4444
+                color: colors[colorIndex]
             });
             const marker = new THREE.Mesh(markerGeometry, markerMaterial);
             marker.position.copy(position);
             measureGroup.add(marker);
             measurePointMarkers.push(marker);
 
-            updateMeasureLine();
+            updateMeasureDisplay();
         }
 
-        function updateMeasureLine() {
+        function updateMeasureDisplay() {
+            if (measureMode === 'distance') {
+                updateMeasureDistance();
+            } else {
+                updateMeasureArea();
+            }
+        }
+
+        function updateMeasureDistance() {
             if (measurePoints.length === 2) {
                 measureLine.geometry.setFromPoints(measurePoints);
                 measureLine.visible = true;
 
                 const distance = measurePoints[0].distanceTo(measurePoints[1]);
                 document.getElementById('measure-length').textContent = distance.toFixed(3);
-            } else if (measurePoints.length === 1) {
+            } else {
                 measureLine.visible = false;
                 document.getElementById('measure-length').textContent = '--';
             }
+            measureAreaMesh.visible = false;
+            measureAreaOutline.visible = false;
+        }
+
+        function updateMeasureArea() {
+            measureLine.visible = false;
+
+            if (measurePoints.length >= 3) {
+                const area = calculatePolygonArea(measurePoints);
+                document.getElementById('measure-area').textContent = area.toFixed(3);
+
+                const pointsWithClose = [...measurePoints, measurePoints[0].clone()];
+                measureAreaOutline.geometry.setFromPoints(pointsWithClose);
+                measureAreaOutline.visible = true;
+
+                const shape = new THREE.Shape();
+                if (measurePoints.length > 0) {
+                    shape.moveTo(measurePoints[0].x, measurePoints[0].z);
+                    for (let i = 1; i < measurePoints.length; i++) {
+                        shape.lineTo(measurePoints[i].x, measurePoints[i].z);
+                    }
+                    shape.lineTo(measurePoints[0].x, measurePoints[0].z);
+                }
+                const shapeGeometry = new THREE.ShapeGeometry(shape);
+                const vertices = shapeGeometry.attributes.position.array;
+                for (let i = 1; i < vertices.length; i += 3) {
+                    const index = Math.floor(i / 3);
+                    if (index < measurePoints.length) {
+                        vertices[i] = measurePoints[index].y;
+                    }
+                }
+                shapeGeometry.attributes.position.needsUpdate = true;
+                measureAreaMesh.geometry.dispose();
+                measureAreaMesh.geometry = shapeGeometry;
+                measureAreaMesh.visible = true;
+            } else {
+                document.getElementById('measure-area').textContent = '--';
+                measureAreaMesh.visible = false;
+                measureAreaOutline.visible = false;
+            }
+        }
+
+        function calculatePolygonArea(points) {
+            if (points.length < 3) return 0;
+
+            let area = 0;
+            const n = points.length;
+
+            for (let i = 0; i < n; i++) {
+                const j = (i + 1) % n;
+                area += points[i].x * points[j].z;
+                area -= points[j].x * points[i].z;
+            }
+
+            return Math.abs(area / 2);
         }
 
         function clearMeasurements() {
@@ -2599,7 +2759,10 @@
             });
             measurePoints = [];
             measureLine.visible = false;
+            measureAreaMesh.visible = false;
+            measureAreaOutline.visible = false;
             document.getElementById('measure-length').textContent = '--';
+            document.getElementById('measure-area').textContent = '--';
         }
 
         function handleMeasureClick(event) {
