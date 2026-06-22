@@ -925,6 +925,191 @@
         #ply-editor-back-btn:hover {
             background: rgba(255, 255, 255, 0.2);
         }
+
+        #model-transform-panel {
+            position: fixed;
+            top: 100px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 15px;
+            z-index: 1000;
+            display: none;
+            color: white;
+            min-width: 220px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #model-transform-panel.show {
+            display: block;
+            animation: slideInRight 0.3s ease;
+        }
+
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .transform-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .transform-panel-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .transform-toggle-btn {
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 14px;
+            cursor: pointer;
+            padding: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .transform-toggle-btn:hover {
+            color: #fff;
+        }
+
+        .transform-content {
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .transform-content.collapsed {
+            max-height: 0;
+            opacity: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+        }
+
+        .transform-section {
+            margin-bottom: 15px;
+        }
+
+        .transform-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .transform-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #aaa;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .transform-controls {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .transform-btn {
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .transform-btn:hover {
+            background: rgba(102, 126, 234, 0.4);
+            border-color: rgba(102, 126, 234, 0.6);
+        }
+
+        .transform-btn:active {
+            transform: scale(0.95);
+        }
+
+        .transform-value {
+            min-width: 60px;
+            text-align: center;
+            font-size: 12px;
+            color: #4ade80;
+            font-family: monospace;
+        }
+
+        .transform-axis {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .transform-axis-label {
+            font-size: 10px;
+            color: #666;
+        }
+
+        .transform-rotate-row {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .transform-rotate-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .rotate-btn-group {
+            display: flex;
+            gap: 3px;
+        }
+
+        .rotate-btn {
+            padding: 6px 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: white;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .rotate-btn:hover {
+            background: rgba(139, 92, 246, 0.4);
+            border-color: rgba(139, 92, 246, 0.6);
+        }
+
+        .transform-reset-btn {
+            width: 100%;
+            padding: 8px;
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            border-radius: 8px;
+            color: #fca5a5;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 10px;
+        }
+
+        .transform-reset-btn:hover {
+            background: rgba(239, 68, 68, 0.4);
+        }
     </style>
 </head>
 <body>
@@ -1198,6 +1383,77 @@
     <!-- PLY编辑模式返回按钮 -->
     <button id="ply-editor-back-btn">← 返回模块选择</button>
 
+    <!-- 模型变换控制面板 -->
+    <div id="model-transform-panel">
+        <div class="transform-header">
+            <span class="transform-panel-title">⚙️ 模型变换</span>
+            <button class="transform-toggle-btn" id="transform-toggle">▼</button>
+        </div>
+        <div class="transform-content">
+            <div class="transform-section">
+                <div class="transform-title">📐 位移 (Position)</div>
+            <div class="transform-controls">
+                <div class="transform-axis">
+                    <button class="transform-btn" id="pos-x-dec">-</button>
+                    <span class="transform-value" id="pos-x-value">0.00</span>
+                    <button class="transform-btn" id="pos-x-inc">+</button>
+                    <span class="transform-axis-label">X</span>
+                </div>
+                <div class="transform-axis">
+                    <button class="transform-btn" id="pos-y-dec">-</button>
+                    <span class="transform-value" id="pos-y-value">0.00</span>
+                    <button class="transform-btn" id="pos-y-inc">+</button>
+                    <span class="transform-axis-label">Y</span>
+                </div>
+                <div class="transform-axis">
+                    <button class="transform-btn" id="pos-z-dec">-</button>
+                    <span class="transform-value" id="pos-z-value">0.00</span>
+                    <button class="transform-btn" id="pos-z-inc">+</button>
+                    <span class="transform-axis-label">Z</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="transform-section">
+            <div class="transform-title">🔄 旋转 (Rotation)</div>
+            <div class="transform-rotate-row">
+                <div class="transform-rotate-controls">
+                    <span class="transform-value" id="rot-x-value">0°</span>
+                    <div class="rotate-btn-group">
+                        <button class="rotate-btn" id="rot-x-dec">-1°</button>
+                        <button class="rotate-btn" id="rot-x-inc">+1°</button>
+                    </div>
+                </div>
+                <div class="transform-rotate-controls">
+                    <span class="transform-value" id="rot-y-value">0°</span>
+                    <div class="rotate-btn-group">
+                        <button class="rotate-btn" id="rot-y-dec">-1°</button>
+                        <button class="rotate-btn" id="rot-y-inc">+1°</button>
+                    </div>
+                </div>
+                <div class="transform-rotate-controls">
+                    <span class="transform-value" id="rot-z-value">0°</span>
+                    <div class="rotate-btn-group">
+                        <button class="rotate-btn" id="rot-z-dec">-1°</button>
+                        <button class="rotate-btn" id="rot-z-inc">+1°</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="transform-section">
+            <div class="transform-title">📏 缩放 (Scale)</div>
+            <div class="transform-controls">
+                <button class="transform-btn" id="scale-dec">-</button>
+                <span class="transform-value" id="scale-value">1.00</span>
+                <button class="transform-btn" id="scale-inc">+</button>
+            </div>
+        </div>
+        
+        <button class="transform-reset-btn" id="transform-reset">↺ 重置变换</button>
+            </div>
+    </div>
+
     <!-- 测量工具栏 -->
     <div id="measure-toolbar">
         <button id="measure-mode-btn" class="measure-mode-btn">线段测量</button>
@@ -1268,6 +1524,16 @@
         let measureLine = null;  // 测量线对象
         let measureAreaMesh = null;  // 面积测量面
         let measureAreaOutline = null;  // 面积测量轮廓线
+
+        // 模型变换相关变量
+        let modelTransform = {
+            position: { x: 0, y: 0, z: 0 },
+            rotation: { x: 0, y: 0, z: 0 },
+            scale: 1.0,
+            positionStep: 0.1,
+            rotationStep: 1,
+            scaleStep: 0.1
+        };
         let measurePointMarkers = [];  // 测量点标记对象
         let measureGroup = null;  // 测量元素组
 
@@ -2830,6 +3096,65 @@
             }
         }
         
+        // ==================== 模型变换功能 ====================
+        function updateTransformUI() {
+            document.getElementById('pos-x-value').textContent = modelTransform.position.x.toFixed(2);
+            document.getElementById('pos-y-value').textContent = modelTransform.position.y.toFixed(2);
+            document.getElementById('pos-z-value').textContent = modelTransform.position.z.toFixed(2);
+            document.getElementById('rot-x-value').textContent = modelTransform.rotation.x + '°';
+            document.getElementById('rot-y-value').textContent = modelTransform.rotation.y + '°';
+            document.getElementById('rot-z-value').textContent = modelTransform.rotation.z + '°';
+            document.getElementById('scale-value').textContent = modelTransform.scale.toFixed(2);
+        }
+
+        function applyModelTransform() {
+            if (!dropInViewer) return;
+            
+            dropInViewer.position.x = modelTransform.position.x;
+            dropInViewer.position.y = modelTransform.position.y;
+            dropInViewer.position.z = modelTransform.position.z;
+            
+            dropInViewer.rotation.x = -Math.PI + modelTransform.rotation.x * Math.PI / 180;
+            dropInViewer.rotation.y = modelTransform.rotation.y * Math.PI / 180;
+            dropInViewer.rotation.z = modelTransform.rotation.z * Math.PI / 180;
+            
+            dropInViewer.scale.set(modelTransform.scale, modelTransform.scale, modelTransform.scale);
+            
+            updateTransformUI();
+        }
+
+        function changePosition(axis, delta) {
+            modelTransform.position[axis] += delta;
+            applyModelTransform();
+        }
+
+        function changeRotation(axis, delta) {
+            modelTransform.rotation[axis] += delta;
+            if (modelTransform.rotation[axis] >= 360) modelTransform.rotation[axis] -= 360;
+            if (modelTransform.rotation[axis] < 0) modelTransform.rotation[axis] += 360;
+            applyModelTransform();
+        }
+
+        function changeScale(delta) {
+            modelTransform.scale = Math.max(0.1, Math.min(10, modelTransform.scale + delta));
+            applyModelTransform();
+        }
+
+        function resetTransform() {
+            modelTransform.position = { x: 0, y: 0, z: 0 };
+            modelTransform.rotation = { x: 0, y: 0, z: 0 };
+            modelTransform.scale = 1.0;
+            applyModelTransform();
+        }
+
+        function showTransformPanel() {
+            document.getElementById('model-transform-panel').classList.add('show');
+        }
+
+        function hideTransformPanel() {
+            document.getElementById('model-transform-panel').classList.remove('show');
+        }
+
         // ==================== PLY模型加载功能 ====================
         async function loadPlyModel(modelPath, parentGroup) {
             console.log('开始加载模型:', modelPath);
@@ -2885,6 +3210,11 @@
                 selectedModelPath = modelPath;
                 console.log('模型加载成功:', modelPath);
                 showTemporaryMessage('模型加载成功');
+                
+                if (isPlyMode && displayMode === 'single') {
+                    resetTransform();
+                    showTransformPanel();
+                }
             } catch (error) {
                 console.error('加载模型失败:', error);
                 showTemporaryMessage('模型加载失败: ' + error.message);
@@ -3846,6 +4176,44 @@
             });
             document.getElementById('save-calibration').addEventListener('click', saveCalibration);
             document.getElementById('reset-calibration').addEventListener('click', resetCalibration);
+
+            // 模型变换控制事件
+            document.getElementById('pos-x-inc').addEventListener('click', () => changePosition('x', modelTransform.positionStep));
+            document.getElementById('pos-x-dec').addEventListener('click', () => changePosition('x', -modelTransform.positionStep));
+            document.getElementById('pos-y-inc').addEventListener('click', () => changePosition('y', modelTransform.positionStep));
+            document.getElementById('pos-y-dec').addEventListener('click', () => changePosition('y', -modelTransform.positionStep));
+            document.getElementById('pos-z-inc').addEventListener('click', () => changePosition('z', modelTransform.positionStep));
+            document.getElementById('pos-z-dec').addEventListener('click', () => changePosition('z', -modelTransform.positionStep));
+            
+            document.getElementById('rot-x-inc').addEventListener('click', () => changeRotation('x', modelTransform.rotationStep));
+            document.getElementById('rot-x-dec').addEventListener('click', () => changeRotation('x', -modelTransform.rotationStep));
+            document.getElementById('rot-y-inc').addEventListener('click', () => changeRotation('y', modelTransform.rotationStep));
+            document.getElementById('rot-y-dec').addEventListener('click', () => changeRotation('y', -modelTransform.rotationStep));
+            document.getElementById('rot-z-inc').addEventListener('click', () => changeRotation('z', modelTransform.rotationStep));
+            document.getElementById('rot-z-dec').addEventListener('click', () => changeRotation('z', -modelTransform.rotationStep));
+            
+            document.getElementById('scale-inc').addEventListener('click', () => changeScale(modelTransform.scaleStep));
+            document.getElementById('scale-dec').addEventListener('click', () => changeScale(-modelTransform.scaleStep));
+            
+            document.getElementById('transform-reset').addEventListener('click', resetTransform);
+            
+            // 变换面板显示/隐藏切换
+            document.getElementById('transform-toggle').addEventListener('click', toggleTransformPanel);
+        }
+
+        function toggleTransformPanel() {
+            const content = document.querySelector('.transform-content');
+            const toggleBtn = document.getElementById('transform-toggle');
+            
+            if (content.classList.contains('collapsed')) {
+                content.classList.remove('collapsed');
+                content.style.maxHeight = content.scrollHeight + 'px';
+                toggleBtn.textContent = '▼';
+            } else {
+                content.classList.add('collapsed');
+                content.style.maxHeight = '0';
+                toggleBtn.textContent = '▶';
+            }
         }
 
         // 启动应用
