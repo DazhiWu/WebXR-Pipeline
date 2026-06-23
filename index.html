@@ -815,25 +815,73 @@
         #measure-toolbar {
             position: fixed;
             top: 100px;
-            left: 50%;
-            transform: translateX(-50%);
+            left: 20px;
             background: rgba(0, 0, 0, 0.85);
             backdrop-filter: blur(10px);
-            padding: 12px 20px;
-            border-radius: 12px;
+            padding: 15px;
+            border-radius: 15px;
             z-index: 1000;
             display: none;
-            flex-direction: row;
-            align-items: center;
-            gap: 15px;
             color: white;
             border: 1px solid rgba(255, 255, 255, 0.1);
-            flex-wrap: wrap;
-            justify-content: center;
+            min-width: 200px;
+            animation: slideInLeft 0.3s ease;
+        }
+
+        @keyframes slideInLeft {
+            from { transform: translateX(-100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
         }
 
         #measure-toolbar.show {
+            display: block;
+        }
+
+        .measure-header {
             display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .measure-panel-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .measure-toggle-btn {
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 14px;
+            cursor: pointer;
+            padding: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .measure-toggle-btn:hover {
+            color: #fff;
+        }
+
+        .measure-content {
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .measure-content.collapsed {
+            max-height: 0;
+            opacity: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+        }
+
+        .measure-controls-row {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
 
         .measure-mode-btn {
@@ -1456,18 +1504,26 @@
 
     <!-- 测量工具栏 -->
     <div id="measure-toolbar">
-        <button id="measure-mode-btn" class="measure-mode-btn">线段测量</button>
-        <div id="measure-distance-display">
-            <span class="measure-label">长度:</span>
-            <span class="measure-value" id="measure-length">--</span>
-            <span class="measure-label">m</span>
+        <div class="measure-header">
+            <span class="measure-panel-title">📐 测量工具</span>
+            <button class="measure-toggle-btn" id="measure-toggle">▼</button>
         </div>
-        <div id="measure-area-display">
-            <span class="measure-label">面积:</span>
-            <span class="measure-value" id="measure-area">--</span>
-            <span class="measure-label">m²</span>
+        <div class="measure-content">
+            <div class="measure-controls-row">
+                <button id="measure-mode-btn" class="measure-mode-btn">线段测量</button>
+                <div id="measure-distance-display">
+                    <span class="measure-label">长度:</span>
+                    <span class="measure-value" id="measure-length">--</span>
+                    <span class="measure-label">m</span>
+                </div>
+                <div id="measure-area-display">
+                    <span class="measure-label">面积:</span>
+                    <span class="measure-value" id="measure-area">--</span>
+                    <span class="measure-label">m²</span>
+                </div>
+                <button id="measure-clear-btn">清除测量</button>
+            </div>
         </div>
-        <button id="measure-clear-btn">清除测量</button>
     </div>
 
     <!-- 测量操作指引 -->
@@ -4199,11 +4255,29 @@
             
             // 变换面板显示/隐藏切换
             document.getElementById('transform-toggle').addEventListener('click', toggleTransformPanel);
+            
+            // 测量面板显示/隐藏切换
+            document.getElementById('measure-toggle').addEventListener('click', toggleMeasurePanel);
         }
 
         function toggleTransformPanel() {
             const content = document.querySelector('.transform-content');
             const toggleBtn = document.getElementById('transform-toggle');
+            
+            if (content.classList.contains('collapsed')) {
+                content.classList.remove('collapsed');
+                content.style.maxHeight = content.scrollHeight + 'px';
+                toggleBtn.textContent = '▼';
+            } else {
+                content.classList.add('collapsed');
+                content.style.maxHeight = '0';
+                toggleBtn.textContent = '▶';
+            }
+        }
+
+        function toggleMeasurePanel() {
+            const content = document.querySelector('.measure-content');
+            const toggleBtn = document.getElementById('measure-toggle');
             
             if (content.classList.contains('collapsed')) {
                 content.classList.remove('collapsed');
