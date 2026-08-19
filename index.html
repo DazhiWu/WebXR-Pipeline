@@ -1350,21 +1350,25 @@
     <div id="model-select-overlay" class="hidden">
         <div id="model-select-title">选择模型</div>
         <div id="model-list">
-            <div class="model-item" data-model="models/splat.ply">
+            <div class="model-item" data-model="https://models.wuzhizhii.com/splat.ply">
                 <div class="model-icon">🎲</div>
                 <div class="model-name">splat.ply</div>
             </div>
-            <div class="model-item" data-model="models/splat2.ply">
+            <div class="model-item" data-model="https://models.wuzhizhii.com/splat2.ply">
                 <div class="model-icon">🎯</div>
                 <div class="model-name">splat2.ply</div>
             </div>
-            <div class="model-item" data-model="models/living-room.ply">
+            <div class="model-item" data-model="https://models.wuzhizhii.com/living-room.compressed.ply">
                 <div class="model-icon">🏠</div>
                 <div class="model-name">living-room.ply</div>
             </div>
-            <div class="model-item" data-model="models/flowerpat.ply">
+            <div class="model-item" data-model="https://models.wuzhizhii.com/flowerpat.ply">
                 <div class="model-icon">🌸</div>
                 <div class="model-name">flowerpat.ply</div>
+            </div>
+            <div class="model-item" data-model="https://models.wuzhizhii.com/3-5_mswipmr3_w2s16t.compressed.ply">
+                <div class="model-icon">🌸</div>
+                <div class="model-name">3-5_mswipmr3_w2s16t.ply</div>
             </div>
         </div>
         <button id="model-select-btn">加载模型</button>
@@ -1380,21 +1384,25 @@
             <div class="model-column">
                 <div class="model-column-title">模型A</div>
                 <div id="model-list-a" class="model-list">
-                    <div class="model-item" data-model="models/splat.ply">
+                    <div class="model-item" data-model="https://models.wuzhizhii.com/splat.ply">
                         <div class="model-icon">🎲</div>
                         <div class="model-name">splat.ply</div>
                     </div>
-                    <div class="model-item" data-model="models/splat2.ply">
+                    <div class="model-item" data-model="https://models.wuzhizhii.com/splat2.ply">
                         <div class="model-icon">🎯</div>
                         <div class="model-name">splat2.ply</div>
                     </div>
-                    <div class="model-item" data-model="models/living-room.ply">
+                    <div class="model-item" data-model="https://models.wuzhizhii.com/living-room.compressed.ply">
                         <div class="model-icon">🏠</div>
                         <div class="model-name">living-room.ply</div>
                     </div>
-                    <div class="model-item" data-model="models/flowerpat.ply">
+                    <div class="model-item" data-model="https://models.wuzhizhii.com/flowerpat.ply">
                         <div class="model-icon">🌸</div>
                         <div class="model-name">flowerpat.ply</div>
+                    </div>
+                    <div class="model-item" data-model="https://models.wuzhizhii.com/3-5_mswipmr3_w2s16t.compressed.ply">
+                        <div class="model-icon">🌸</div>
+                        <div class="model-name">3-5_mswipmr3_w2s16t.ply</div>
                     </div>
                 </div>
             </div>
@@ -1402,21 +1410,25 @@
             <div class="model-column">
                 <div class="model-column-title">模型B</div>
                 <div id="model-list-b" class="model-list">
-                    <div class="model-item" data-model="models/splat.ply">
+                    <div class="model-item" data-model="https://models.wuzhizhii.com/splat.ply">
                         <div class="model-icon">🎲</div>
                         <div class="model-name">splat.ply</div>
                     </div>
-                    <div class="model-item" data-model="models/splat2.ply">
+                    <div class="model-item" data-model="https://models.wuzhizhii.com/splat2.ply">
                         <div class="model-icon">🎯</div>
                         <div class="model-name">splat2.ply</div>
                     </div>
-                    <div class="model-item" data-model="models/living-room.ply">
+                    <div class="model-item" data-model="https://models.wuzhizhii.com/living-room.compressed.ply">
                         <div class="model-icon">🏠</div>
                         <div class="model-name">living-room.ply</div>
                     </div>
-                    <div class="model-item" data-model="models/flowerpat.ply">
+                    <div class="model-item" data-model="https://models.wuzhizhii.com/flowerpat.ply">
                         <div class="model-icon">🌸</div>
                         <div class="model-name">flowerpat.ply</div>
+                    </div>
+                    <div class="model-item" data-model="https://models.wuzhizhii.com/3-5_mswipmr3_w2s16t.compressed.ply">
+                        <div class="model-icon">🌸</div>
+                        <div class="model-name">3-5_mswipmr3_w2s16t.ply</div>
                     </div>
                 </div>
             </div>
@@ -3282,6 +3294,7 @@
                 }
                 dropInViewer.dispose();
                 dropInViewer = null;
+                modelBasePosition = { x: 0, y: 0, z: 0 };
             }
             
             try {
@@ -3390,6 +3403,22 @@
                 
                 console.log('准备加载模型，parentGroup:', parentGroup);
                 await loadPlyModel(selectedModelPath, parentGroup);
+                
+                // 根据经纬度调整模型位置（模型切换时）
+                if (arAnchor && currentLocation && dropInViewer) {
+                    const modelLatLng = await getModelLatLng(selectedModelPath);
+                    const offset = geoToWorld(
+                        modelLatLng.lat,
+                        modelLatLng.lng,
+                        currentLocation.lat,
+                        currentLocation.lng
+                    );
+                    
+                    modelBasePosition = { x: offset.x, y: 0, z: offset.z };
+                    applyModelTransform();
+                    
+                    showTemporaryMessage(`模型已定位到: ${modelLatLng.lat.toFixed(4)}°, ${modelLatLng.lng.toFixed(4)}°`);
+                }
                 
                 if (isDesktopMode && controls) {
                     camera.position.set(8, 6, 8);
