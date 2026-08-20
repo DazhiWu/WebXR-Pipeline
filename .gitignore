@@ -1,5 +1,7 @@
 node_modules/
-models/
+models/living-room.ply
+models/living-room.compressed.ply
+models/Merged.glb
 dist/
 dist.zip
 anotherProject/

@@ -1808,6 +1808,7 @@
         </div>
         
         <button class="transform-reset-btn" id="transform-reset">↺ 重置变换</button>
+        <button class="transform-reset-btn" id="glb-measure-toggle" style="margin-top: 8px; background: rgba(74, 222, 128, 0.2); border-color: rgba(74, 222, 128, 0.4); color: #4ade80;">📏 测量模式</button>
             </div>
     </div>
 
@@ -1907,6 +1908,8 @@
         let glbCurrentAction = null;  // 当前动画动作
         let glbIsAnimPlaying = true;  // 动画是否正在播放
         let glbClock = new THREE.Clock();  // 动画时钟
+        let glbMeasureDistanceLabel = null;  // GLB测量距离标签（3D Sprite）
+        let glbMeasureMode = false;  // GLB模式是否启用测量工具
 
         // 模型变换相关变量
         let modelTransform = {
@@ -2936,7 +2939,7 @@
             } else {
                 renderer.domElement.removeEventListener('click', handleMeasureClick);
             }
-            
+
             if (measureGroup) {
                 scene.remove(measureGroup);
                 measureGroup = null;
@@ -2947,6 +2950,15 @@
                 measureLine.visible = false;
             }
             document.getElementById('measure-length').textContent = '--';
+
+            // 清理GLB测量距离标签
+            if (glbMeasureDistanceLabel) {
+                scene.remove(glbMeasureDistanceLabel);
+                glbMeasureDistanceLabel.material.map.dispose();
+                glbMeasureDistanceLabel.material.dispose();
+                glbMeasureDistanceLabel = null;
+            }
+            glbMeasureMode = false;
             
             // 清理高斯泼溅模型
             if (dropInViewer) {
@@ -3081,12 +3093,23 @@
                 // GLB模式：检测到地面后加载GLB模型
                 instructions.textContent = '正在加载GLB模型...';
                 reticle.visible = false;
-                
+
                 const modelPath = window.glbPendingModelPath;
                 if (modelPath) {
                     await loadGlbModel(modelPath, arAnchor);
                     window.glbPendingModelPath = null;
-                    instructions.textContent = 'GLB模型已加载';
+                    instructions.textContent = '点击模型添加测量点';
+
+                    // AR模式GLB加载完成后，启用测量工具
+                    initMeasureTool();
+                    document.getElementById('measure-toolbar').classList.add('show');
+                    document.getElementById('measure-instructions').style.display = 'block';
+
+                    if ('ontouchstart' in window) {
+                        renderer.domElement.addEventListener('touchstart', handleMeasureClick);
+                    } else {
+                        renderer.domElement.addEventListener('click', handleMeasureClick);
+                    }
                 } else {
                     instructions.textContent = '请选择GLB模型';
                 }
@@ -3423,10 +3446,28 @@
                 measureLine.visible = true;
 
                 const distance = measurePoints[0].distanceTo(measurePoints[1]);
-                document.getElementById('measure-length').textContent = distance.toFixed(3);
+                // 根据距离自动选择单位：<1米显示厘米，>=1米显示米
+                let displayText, displayUnit;
+                if (distance < 1) {
+                    displayText = (distance * 100).toFixed(1);
+                    displayUnit = 'cm';
+                } else {
+                    displayText = distance.toFixed(3);
+                    displayUnit = 'm';
+                }
+                document.getElementById('measure-length').textContent = displayText + ' ' + displayUnit;
+
+                // 在GLB模式下添加3D距离标签
+                if (isGlbMode) {
+                    createGlbDistanceLabel(measurePoints[0], measurePoints[1], distance, displayText, displayUnit);
+                }
             } else {
                 measureLine.visible = false;
                 document.getElementById('measure-length').textContent = '--';
+                if (glbMeasureDistanceLabel) {
+                    scene.remove(glbMeasureDistanceLabel);
+                    glbMeasureDistanceLabel = null;
+                }
             }
             measureAreaMesh.visible = false;
             measureAreaOutline.visible = false;
@@ -3500,12 +3541,19 @@
             measureAreaOutline.visible = false;
             document.getElementById('measure-length').textContent = '--';
             document.getElementById('measure-area').textContent = '--';
+
+            // 清理GLB测量距离标签
+            if (glbMeasureDistanceLabel) {
+                scene.remove(glbMeasureDistanceLabel);
+                glbMeasureDistanceLabel.material.map.dispose();
+                glbMeasureDistanceLabel.material.dispose();
+                glbMeasureDistanceLabel = null;
+            }
         }
 
         function handleMeasureClick(event) {
-            if (!dropInViewer) return;
-
-            if (!isPlyEditorMode && !isARActive) return;
+            // 支持多种模式: PLY编辑模式、AR模式（PLY和GLB）、GLB桌面模式
+            if (!isPlyEditorMode && !isARActive && !(isGlbMode && isDesktopMode && glbMeasureMode)) return;
 
             if (event.type === 'touchstart') {
                 event.preventDefault();
@@ -3518,53 +3566,234 @@
             const pixelX = clientX - rect.left;
             const pixelY = clientY - rect.top;
 
-            const viewer = dropInViewer.viewer;
-            const splatMesh = viewer ? viewer.splatMesh : null;
-            const viewerRaycaster = viewer ? viewer.raycaster : null;
+            pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
-            if (splatMesh && viewerRaycaster && viewer.camera) {
-                const renderDimensions = new THREE.Vector2(rect.width, rect.height);
-                const outHits = [];
+            raycaster.setFromCamera(pointer, camera);
 
-                viewerRaycaster.setFromCameraAndScreenPosition(viewer.camera, new THREE.Vector2(pixelX, pixelY), renderDimensions);
-                viewerRaycaster.intersectSplatMesh(splatMesh, outHits);
+            let intersects = [];
 
-                if (outHits.length > 0) {
-                    const hit = outHits[0];
-                    const point = hit.origin.clone();
-                    addMeasurePoint(point);
-                    event.stopPropagation();
+            // 处理不同模式下的模型射线检测
+            if (isGlbMode && glbModelGroup) {
+                // GLB模式：遍历GLB模型组进行射线检测
+                glbModelGroup.traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        const childIntersects = raycaster.intersectObject(child);
+                        intersects = intersects.concat(childIntersects);
+                    }
+                });
+            } else if (dropInViewer && dropInViewer.viewer) {
+                // PLY高斯泼溅模型
+                const viewer = dropInViewer.viewer;
+                const splatMesh = viewer ? viewer.splatMesh : null;
+                const viewerRaycaster = viewer ? viewer.raycaster : null;
+
+                if (splatMesh && viewerRaycaster && viewer.camera) {
+                    const renderDimensions = new THREE.Vector2(rect.width, rect.height);
+                    const outHits = [];
+
+                    viewerRaycaster.setFromCameraAndScreenPosition(viewer.camera, new THREE.Vector2(pixelX, pixelY), renderDimensions);
+                    viewerRaycaster.intersectSplatMesh(splatMesh, outHits);
+
+                    if (outHits.length > 0) {
+                        const hit = outHits[0];
+                        const point = hit.origin.clone();
+                        addMeasurePoint(point);
+                        event.stopPropagation();
+                        return;
+                    }
                 }
-            } else {
-                pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-                pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-
-                raycaster.setFromCamera(pointer, camera);
-
-                let intersects = [];
-                if (dropInViewer instanceof THREE.Group) {
-                    dropInViewer.traverse((child) => {
-                        if (child instanceof THREE.Mesh) {
-                            const childIntersects = raycaster.intersectObject(child);
-                            intersects = intersects.concat(childIntersects);
-                        }
-                    });
-                } else if (dropInViewer.children && dropInViewer.children.length > 0) {
-                    dropInViewer.children[0].traverse((child) => {
-                        if (child instanceof THREE.Mesh) {
-                            const childIntersects = raycaster.intersectObject(child);
-                            intersects = intersects.concat(childIntersects);
-                        }
-                    });
-                }
-
-                if (intersects.length > 0) {
-                    intersects.sort((a, b) => a.distance - b.distance);
-                    const point = intersects[0].point;
-                    addMeasurePoint(point);
-                    event.stopPropagation();
-                }
+            } else if (dropInViewer instanceof THREE.Group) {
+                // 通用THREE.Group模型
+                dropInViewer.traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        const childIntersects = raycaster.intersectObject(child);
+                        intersects = intersects.concat(childIntersects);
+                    }
+                });
+            } else if (dropInViewer && dropInViewer.children && dropInViewer.children.length > 0) {
+                dropInViewer.children[0].traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        const childIntersects = raycaster.intersectObject(child);
+                        intersects = intersects.concat(childIntersects);
+                    }
+                });
             }
+
+            // 处理相交结果
+            if (intersects.length > 0) {
+                intersects.sort((a, b) => a.distance - b.distance);
+                const point = intersects[0].point.clone();
+                addMeasurePoint(point);
+                event.stopPropagation();
+            }
+        }
+
+        /**
+         * 初始化GLB测量工具
+         * 在桌面模式下启用点击选点测量功能
+         */
+        function initGlbMeasureTool() {
+            if (!isGlbMode) return;
+
+            glbMeasureMode = true;
+
+            // 初始化测量组（如果尚未初始化）
+            if (!measureGroup) {
+                measureGroup = new THREE.Group();
+                scene.add(measureGroup);
+
+                // 初始化测距线
+                const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+                    new THREE.Vector3(0, 0, 0),
+                    new THREE.Vector3(1, 0, 0)
+                ]);
+                const lineMaterial = new THREE.LineBasicMaterial({
+                    color: 0x4ade80,
+                    linewidth: 2,
+                    transparent: true,
+                    opacity: 0.9
+                });
+                measureLine = new THREE.Line(lineGeometry, lineMaterial);
+                measureLine.visible = false;
+                measureGroup.add(measureLine);
+            }
+
+            // 显示测量工具栏
+            document.getElementById('measure-toolbar').classList.add('show');
+            document.getElementById('measure-instructions').style.display = 'block';
+            document.getElementById('measure-instructions').textContent = '点击模型表面添加测量点（最多2个点）';
+
+            // 注册点击事件
+            if ('ontouchstart' in window) {
+                renderer.domElement.addEventListener('touchstart', handleMeasureClick);
+            } else {
+                renderer.domElement.addEventListener('click', handleMeasureClick);
+            }
+
+            // 绑定清除按钮
+            document.getElementById('measure-clear-btn').addEventListener('click', clearMeasurements);
+
+            console.log('GLB测量工具已初始化');
+        }
+
+        /**
+         * 停用GLB测量工具
+         */
+        function deactivateGlbMeasureTool() {
+            glbMeasureMode = false;
+
+            // 隐藏测量工具栏
+            document.getElementById('measure-toolbar').classList.remove('show');
+            document.getElementById('measure-instructions').style.display = 'none';
+
+            // 移除点击事件
+            if ('ontouchstart' in window) {
+                renderer.domElement.removeEventListener('touchstart', handleMeasureClick);
+            } else {
+                renderer.domElement.removeEventListener('click', handleMeasureClick);
+            }
+
+            // 清理测量数据
+            clearMeasurements();
+
+            console.log('GLB测量工具已停用');
+        }
+
+        /**
+         * 创建GLB测量距离的3D标签（Sprite）
+         * 在两点中点位置显示带背景的测量数值
+         */
+        function createGlbDistanceLabel(pointA, pointB, distance, displayText, displayUnit) {
+            // 清除旧标签
+            if (glbMeasureDistanceLabel) {
+                scene.remove(glbMeasureDistanceLabel);
+                glbMeasureDistanceLabel.material.map.dispose();
+                glbMeasureDistanceLabel.material.dispose();
+                glbMeasureDistanceLabel = null;
+            }
+
+            // 计算中点位置
+            const midPoint = new THREE.Vector3().addVectors(pointA, pointB).multiplyScalar(0.5);
+
+            // 创建Canvas纹理
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 320;
+            canvas.height = 80;
+
+            // 绘制带圆角背景的标签
+            const radius = 12;
+            const padding = 16;
+            const labelText = displayText + ' ' + displayUnit;
+
+            ctx.font = 'bold 36px Arial, sans-serif';
+            const textWidth = ctx.measureText(labelText).width;
+            const totalWidth = textWidth + padding * 2 + 40; // 40px for icon
+            const totalHeight = 80;
+
+            // 半透明背景
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetY = 2;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+            ctx.beginPath();
+            ctx.moveTo(radius, 0);
+            ctx.lineTo(totalWidth - radius, 0);
+            ctx.quadraticCurveTo(totalWidth, 0, totalWidth, radius);
+            ctx.lineTo(totalWidth, totalHeight - radius);
+            ctx.quadraticCurveTo(totalWidth, totalHeight, totalWidth - radius, totalHeight);
+            ctx.lineTo(radius, totalHeight);
+            ctx.quadraticCurveTo(0, totalHeight, 0, totalHeight - radius);
+            ctx.lineTo(0, radius);
+            ctx.quadraticCurveTo(0, 0, radius, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            // 重置阴影
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+
+            // 绘制尺子图标（简化）
+            ctx.fillStyle = '#4ade80';
+            ctx.font = '28px Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('📏', 30, totalHeight / 2);
+
+            // 绘制距离数值
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 36px Arial, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(labelText, 60, totalHeight / 2);
+
+            // 绘制单位标签
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.font = '20px Arial, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(displayUnit, 60 + ctx.measureText(displayText).width + 8, totalHeight / 2);
+
+            // 创建Sprite
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            const material = new THREE.SpriteMaterial({
+                map: texture,
+                transparent: true,
+                depthTest: false,
+                depthWrite: false,
+                sizeAttenuation: true
+            });
+            glbMeasureDistanceLabel = new THREE.Sprite(material);
+
+            // 根据距离调整标签大小（保持视觉一致性）
+            const labelScale = Math.max(0.2, Math.min(1.0, distance * 0.3));
+            glbMeasureDistanceLabel.scale.set(labelScale * 2.0, labelScale * 0.5, 1);
+            glbMeasureDistanceLabel.position.copy(midPoint);
+            glbMeasureDistanceLabel.position.y += 0.15; // 略微抬高避免遮挡测距线
+
+            scene.add(glbMeasureDistanceLabel);
         }
         
         // ==================== 模型变换功能 ====================
@@ -3832,7 +4061,12 @@
                 
                 showTemporaryMessage('GLB模型加载成功');
                 console.log('GLB模型加载成功:', modelPath);
-                
+
+                // 在桌面模式下自动初始化测量工具
+                if (isDesktopMode) {
+                    initGlbMeasureTool();
+                }
+
                 // 显示变换面板
                 showTransformPanel();
                 
@@ -3954,7 +4188,32 @@
             }
             
             glbModelScene = null;
-            
+
+            // 清理GLB测量距离标签
+            if (glbMeasureDistanceLabel) {
+                scene.remove(glbMeasureDistanceLabel);
+                glbMeasureDistanceLabel.material.map.dispose();
+                glbMeasureDistanceLabel.material.dispose();
+                glbMeasureDistanceLabel = null;
+            }
+
+            // 清理测量工具
+            if (measureGroup) {
+                scene.remove(measureGroup);
+                measureGroup.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (child.material.map) child.material.map.dispose();
+                        child.material.dispose();
+                    }
+                });
+                measureGroup = null;
+            }
+            measurePoints = [];
+            measurePointMarkers = [];
+            measureLine = null;
+            glbMeasureMode = false;
+
             console.log('GLB模型资源已清理');
         }
 
@@ -5145,6 +5404,9 @@
             
             // 测量面板显示/隐藏切换
             document.getElementById('measure-toggle').addEventListener('click', toggleMeasurePanel);
+
+            // GLB测量模式切换
+            document.getElementById('glb-measure-toggle').addEventListener('click', toggleGlbMeasureMode);
         }
 
         function toggleTransformPanel() {
@@ -5174,6 +5436,24 @@
                 content.classList.add('collapsed');
                 content.style.maxHeight = '0';
                 toggleBtn.textContent = '▶';
+            }
+        }
+
+        /**
+         * 手动切换GLB测量模式开关
+         */
+        function toggleGlbMeasureMode() {
+            if (glbMeasureMode) {
+                deactivateGlbMeasureTool();
+                document.getElementById('glb-measure-toggle').style.background = 'rgba(74, 222, 128, 0.2)';
+                document.getElementById('glb-measure-toggle').textContent = '📏 测量模式';
+            } else if (isGlbMode) {
+                initGlbMeasureTool();
+                document.getElementById('glb-measure-toggle').style.background = 'rgba(74, 222, 128, 0.5)';
+                document.getElementById('glb-measure-toggle').textContent = '📏 退出测量';
+                showTemporaryMessage('已启用测量模式：点击模型添加测量点');
+            } else {
+                showTemporaryMessage('请先加载GLB模型后再启用测量');
             }
         }
 
