@@ -1916,9 +1916,10 @@
         let glbCurrentAction = null;  // 当前动画动作
         let glbIsAnimPlaying = true;  // 动画是否正在播放
         let glbClock = new THREE.Clock();  // 动画时钟
-        let glbMeasureDistanceLabel = null;  // GLB测量距离标签（3D Sprite）
-        let glbMeasureMode = false;  // GLB模式是否启用测量工具
+        let glbMeasureDistanceLabel = null;  // GLB模型测量距离标签（3D Sprite）
+        let glbMeasureMode = false;  // GLB模型模式是否启用测量工具
         let glbModelScale = 1.0;  // GLB模型校准比例（默认1.0=1单位=1米）
+        let groundPlaneIndicator = null;  // 地面网格指示器（AR可视化锚定位置）
 
         // 模型变换相关变量
         let modelTransform = {
@@ -2940,6 +2941,12 @@
             instructions.style.display = 'none';
             pipelineGroup.visible = false;
             
+            // 重置AR会话状态，以便下次启动时重新初始化
+            hitTestSourceRequested = false;
+            hitTestSource = null;
+            groundDetected = false;
+            if (reticle) reticle.visible = false;
+            
             // 清理测量工具
             document.getElementById('measure-toolbar').classList.remove('show');
             document.getElementById('measure-instructions').style.display = 'none';
@@ -2983,6 +2990,9 @@
             cleanupGlbModel();
             isGlbMode = false;
             
+            // 清理地面网格指示器
+            cleanupGroundPlaneIndicator();
+            
             if (arAnchor) {
                 scene.remove(arAnchor);
                 arAnchor = null;
@@ -3005,7 +3015,7 @@
                     });
                 }
                 
-                // 执行hit test
+                // 执行hit test - 只在锚点创建前执行
                 if (hitTestSource && !arAnchor) {
                     const hitTestResults = frame.getHitTestResults(hitTestSource);
                     
@@ -3018,13 +3028,24 @@
                             reticle.matrix.fromArray(hitPose.transform.matrix);
                             reticle.matrix.decompose(reticle.position, reticle.quaternion, reticle.scale);
                             
-                            // 当检测到地面且锚点未创建时，自动创建锚点并放置管网
+                            // 当检测到地面且锚点未创建时，自动创建锚点并放置模型
                             if (!arAnchor) {
                                 createARAnchor(hitPose.transform.matrix, referenceSpace);
                             }
                         }
                     } else {
                         reticle.visible = false;
+                    }
+                }
+                
+                // 锚点创建后，确保锚点及其子元素的world matrix每帧正确更新
+                if (arAnchor) {
+                    // 确保锚点组的世界矩阵已更新，使子元素（模型、地面指示器）正确渲染
+                    arAnchor.updateMatrixWorld(true);
+                    // 停止hit test以节省性能（锚点已创建，不再需要）
+                    if (hitTestSource) {
+                        hitTestSource.cancel();
+                        hitTestSource = null;
                     }
                 }
             }
@@ -3045,10 +3066,17 @@
 
         async function createARAnchor(matrix, referenceSpace) {
             arAnchor = new THREE.Group();
-            arAnchor.matrix.fromArray(matrix);
-            arAnchor.matrix.decompose(arAnchor.position, arAnchor.quaternion, arAnchor.scale);
-            arAnchor.matrixAutoUpdate = false;
+            // 从hit test矩阵中提取位置、旋转和缩放
+            const tempMatrix = new THREE.Matrix4().fromArray(matrix);
+            tempMatrix.decompose(arAnchor.position, arAnchor.quaternion, arAnchor.scale);
+            // 使用matrixAutoUpdate = true（默认值），让Three.js自动管理矩阵更新
+            // 这样当子元素添加到锚点后，matrixWorld能正确计算
+            arAnchor.matrixAutoUpdate = true;
+            arAnchor.matrixWorldNeedsUpdate = true;
             scene.add(arAnchor);
+            
+            // 在锚点位置创建地面网格指示器，用于可视化确认锚定位置
+            createGroundPlaneIndicator(arAnchor);
             
             if (isPlyMode) {
                 // PLY模式：如果已选择模型，直接加载并放置到地面
@@ -3321,6 +3349,79 @@
             ground.rotation.x = -Math.PI / 2;
             ground.position.y = -0.02;
             scene.add(ground);
+        }
+
+        /**
+         * 在AR锚点位置创建地面网格指示器
+         * 用于可视化确认锚定位置，帮助用户验证模型是否固定在现实空间中
+         * @param {THREE.Group} parentGroup - 锚点组对象
+         */
+        function createGroundPlaneIndicator(parentGroup) {
+            // 清理旧指示器
+            cleanupGroundPlaneIndicator();
+            
+            // 创建半透明圆形网格地面指示器
+            const gridRadius = 2.0;
+            const gridDivisions = 20;
+            const gridHelper = new THREE.GridHelper(gridRadius * 2, gridDivisions, 0x4ade80, 0x22c55e);
+            gridHelper.position.y = 0.01; // 略高于地面，避免Z-fighting
+            gridHelper.material.transparent = true;
+            gridHelper.material.opacity = 0.6;
+            
+            // 添加环形标记（类似reticle的视觉提示）
+            const ringGeometry = new THREE.RingGeometry(0.15, 0.25, 64);
+            const ringMaterial = new THREE.MeshBasicMaterial({
+                color: 0x4ade80,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.8,
+                depthWrite: false
+            });
+            const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.y = 0.02;
+            
+            // 添加中心点标记
+            const dotGeometry = new THREE.CircleGeometry(0.05, 16);
+            const dotMaterial = new THREE.MeshBasicMaterial({
+                color: 0x4ade80,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.9,
+                depthWrite: false
+            });
+            const dot = new THREE.Mesh(dotGeometry, dotMaterial);
+            dot.rotation.x = -Math.PI / 2;
+            dot.position.y = 0.02;
+            
+            // 将指示器元素添加到组
+            groundPlaneIndicator = new THREE.Group();
+            groundPlaneIndicator.add(gridHelper);
+            groundPlaneIndicator.add(ring);
+            groundPlaneIndicator.add(dot);
+            
+            parentGroup.add(groundPlaneIndicator);
+            
+            console.log('地面网格指示器已创建在锚点位置');
+        }
+
+        function cleanupGroundPlaneIndicator() {
+            if (groundPlaneIndicator) {
+                if (arAnchor) {
+                    arAnchor.remove(groundPlaneIndicator);
+                } else {
+                    scene.remove(groundPlaneIndicator);
+                }
+                // 递归释放资源
+                groundPlaneIndicator.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (child.material.map) child.material.map.dispose();
+                        child.material.dispose();
+                    }
+                });
+                groundPlaneIndicator = null;
+            }
         }
         
         function desktopRender() {
@@ -4043,6 +4144,20 @@
                 glbModelGroup = new THREE.Group();
                 glbModelGroup.add(glbModelScene);
                 
+                // 关键修复：归一化模型根节点的变换
+                // 将GLB模型根节点（glbModelScene）的本地变换归零，确保模型定位完全由
+                // arAnchor（锚点）控制，避免模型自身偏移导致锚定失效
+                const rootPosition = glbModelScene.position.clone();
+                const rootQuaternion = glbModelScene.quaternion.clone();
+                const rootScale = glbModelScene.scale.clone();
+                glbModelScene.position.set(0, 0, 0);
+                glbModelScene.quaternion.identity();
+                glbModelScene.scale.set(1, 1, 1);
+                // 将根节点原始变换应用到模型组级别，确保模型视觉位置不变
+                glbModelGroup.position.copy(rootPosition);
+                glbModelGroup.quaternion.copy(rootQuaternion);
+                glbModelGroup.scale.copy(rootScale);
+                
                 // 居中模型 - 确保世界矩阵已更新
                 if (centerModel) {
                     glbModelGroup.updateWorldMatrix(true, true);
@@ -4113,6 +4228,22 @@
             // 播放第一个动画
             if (animations.length > 0) {
                 const anim = animations[0];
+                
+                // 检查动画是否会影响根节点的位置变换
+                // 如果动画影响position/translation通道，可能导致模型在AR中看起来跟随手机移动
+                if (anim.tracks) {
+                    const positionTracks = anim.tracks.filter(track => 
+                        track.name.endsWith('.position') || 
+                        track.name.endsWith('.translation') ||
+                        track.name.endsWith('.quaternion') ||
+                        track.name.endsWith('.rotation')
+                    );
+                    if (positionTracks.length > 0) {
+                        console.warn('GLB动画包含位置/旋转变换轨道，这些轨道可能影响AR锚定效果:', 
+                            positionTracks.map(t => t.name).join(', '));
+                    }
+                }
+                
                 glbCurrentAction = glbMixer.clipAction(anim);
                 glbCurrentAction.play();
                 glbIsAnimPlaying = true;
