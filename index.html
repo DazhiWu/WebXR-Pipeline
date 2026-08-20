@@ -410,9 +410,9 @@
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
             display: flex;
             flex-direction: column;
-            justify-content: center;
             align-items: center;
-            padding: 20px;
+            padding: 60px 20px 20px 20px;
+            overflow: hidden;
         }
 
         #module-select-overlay.hidden {
@@ -425,13 +425,54 @@
             color: #fff;
             margin-bottom: 10px;
             text-align: center;
+            flex-shrink: 0;
         }
 
         #module-select-subtitle {
             font-size: 14px;
             color: #aaa;
-            margin-bottom: 40px;
+            margin-bottom: 24px;
             text-align: center;
+            flex-shrink: 0;
+        }
+
+        /* 功能按钮可滚动容器 */
+        #module-select-cards {
+            width: 100%;
+            max-width: 340px;
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            scroll-behavior: smooth;
+            overscroll-behavior: contain;
+            touch-action: pan-y;
+            padding: 4px 0;
+            /* 隐藏滚动条但保持可滚动 */
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+        }
+
+        #module-select-cards::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #module-select-cards::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #module-select-cards::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+
+        @supports (padding: max(0px)) {
+            #module-select-overlay {
+                padding-top: max(60px, env(safe-area-inset-top, 20px));
+                padding-bottom: max(20px, env(safe-area-inset-bottom, 20px));
+                padding-left: max(20px, env(safe-area-inset-left, 20px));
+                padding-right: max(20px, env(safe-area-inset-right, 20px));
+            }
         }
 
         .module-card {
@@ -1483,28 +1524,30 @@
         <div id="module-select-title">🔮 WebXR 地下管网</div>
         <div id="module-select-subtitle">请选择要使用的功能模块</div>
         
-        <div class="module-card" id="ply-module-card">
-            <div class="module-icon">📦</div>
-            <div class="module-name">PLY文件加载</div>
-            <div class="module-desc">加载和展示PLY格式的3D模型，支持AR和桌面测试模式</div>
-        </div>
-        
-        <div class="module-card" id="pipeline-module-card">
-            <div class="module-icon">🛠️</div>
-            <div class="module-name">AR管道</div>
-            <div class="module-desc">基于真实地理位置的地下管网AR可视化</div>
-        </div>
+        <div id="module-select-cards">
+            <div class="module-card" id="ply-module-card">
+                <div class="module-icon">📦</div>
+                <div class="module-name">PLY文件加载</div>
+                <div class="module-desc">加载和展示PLY格式的3D模型，支持AR和桌面测试模式</div>
+            </div>
+            
+            <div class="module-card" id="pipeline-module-card">
+                <div class="module-icon">🛠️</div>
+                <div class="module-name">AR管道</div>
+                <div class="module-desc">基于真实地理位置的地下管网AR可视化</div>
+            </div>
 
-        <div class="module-card" id="ply-editor-module-card">
-            <div class="module-icon">✏️</div>
-            <div class="module-name">PLY编辑模式</div>
-            <div class="module-desc">加载PLY模型并进行测量编辑，支持线段测量</div>
-        </div>
+            <div class="module-card" id="ply-editor-module-card">
+                <div class="module-icon">✏️</div>
+                <div class="module-name">PLY编辑模式</div>
+                <div class="module-desc">加载PLY模型并进行测量编辑，支持线段测量</div>
+            </div>
 
-        <div class="module-card" id="glb-module-card">
-            <div class="module-icon">🧊</div>
-            <div class="module-name">GLB模型加载</div>
-            <div class="module-desc">加载和展示GLB格式的3D模型，支持纹理、材质和动画</div>
+            <div class="module-card" id="glb-module-card">
+                <div class="module-icon">🧊</div>
+                <div class="module-name">GLB模型加载</div>
+                <div class="module-desc">加载和展示GLB格式的3D模型，支持纹理、材质和动画</div>
+            </div>
         </div>
     </div>
 
