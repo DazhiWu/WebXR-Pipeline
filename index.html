@@ -1831,8 +1831,16 @@
                     <span class="measure-value" id="measure-area">--</span>
                     <span class="measure-label">m²</span>
                 </div>
-                <button id="measure-clear-btn">清除测量</button>
             </div>
+            <div class="measure-controls-row" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">单位校准 (模型比例)</div>
+                <div class="transform-controls" style="justify-content: space-between;">
+                    <button class="transform-btn" id="cal-scale-smaller" style="flex: 1;">-</button>
+                    <span class="measure-value" id="cal-scale-value" style="text-align: center;">1.00x</span>
+                    <button class="transform-btn" id="cal-scale-bigger" style="flex: 1;">+</button>
+                </div>
+            </div>
+                <button id="measure-clear-btn" style="margin-top: 8px;">清除测量</button>
         </div>
     </div>
 
@@ -1910,6 +1918,7 @@
         let glbClock = new THREE.Clock();  // 动画时钟
         let glbMeasureDistanceLabel = null;  // GLB测量距离标签（3D Sprite）
         let glbMeasureMode = false;  // GLB模式是否启用测量工具
+        let glbModelScale = 1.0;  // GLB模型校准比例（默认1.0=1单位=1米）
 
         // 模型变换相关变量
         let modelTransform = {
@@ -4043,6 +4052,11 @@
                     glbModelGroup.position.sub(center);
                 }
                 
+                // 应用校准比例（恢复之前设置的 scale 值）
+                if (glbModelScale !== 1.0) {
+                    glbModelGroup.scale.set(glbModelScale, glbModelScale, glbModelScale);
+                }
+                
                 // 添加模型到父级
                 parentGroup.add(glbModelGroup);
                 
@@ -4215,6 +4229,8 @@
             measurePointMarkers = [];
             measureLine = null;
             glbMeasureMode = false;
+            glbModelScale = 1.0;  // 重置校准比例
+            document.getElementById('cal-scale-value').textContent = '1.00x';
 
             console.log('GLB模型资源已清理');
         }
@@ -5409,6 +5425,10 @@
 
             // GLB测量模式切换
             document.getElementById('glb-measure-toggle').addEventListener('click', toggleGlbMeasureMode);
+
+            // 单位校准比例控制
+            document.getElementById('cal-scale-bigger').addEventListener('click', () => changeCalibrationScale(0.05));
+            document.getElementById('cal-scale-smaller').addEventListener('click', () => changeCalibrationScale(-0.05));
         }
 
         function toggleTransformPanel() {
@@ -5456,6 +5476,47 @@
                 showTemporaryMessage('已启用测量模式：点击模型添加测量点');
             } else {
                 showTemporaryMessage('请先加载GLB模型后再启用测量');
+            }
+        }
+
+        /**
+         * 调整GLB模型单位校准比例
+         * 用于修正模型与实际物理尺寸的偏差
+         * @param {number} delta - 比例变化量（步长0.05）
+         */
+        function changeCalibrationScale(delta) {
+            // 限制范围 0.01 ~ 10.0
+            glbModelScale = Math.max(0.01, Math.min(10.0, glbModelScale + delta));
+            
+            // 更新UI显示
+            document.getElementById('cal-scale-value').textContent = glbModelScale.toFixed(2) + 'x';
+            
+            // 如果模型已加载，实时应用比例
+            if (glbModelGroup && isGlbMode) {
+                glbModelGroup.scale.set(glbModelScale, glbModelScale, glbModelScale);
+                glbModelGroup.updateWorldMatrix(true, true);
+                
+                // 更新已有的测量结果（如果存在）
+                if (measurePoints.length === 2) {
+                    updateMeasureDistance();
+                }
+                
+                showTemporaryMessage('校准比例: ' + glbModelScale.toFixed(2) + 'x');
+            }
+        }
+
+        /**
+         * 重置校准比例
+         */
+        function resetCalibrationScale() {
+            glbModelScale = 1.0;
+            document.getElementById('cal-scale-value').textContent = '1.00x';
+            if (glbModelGroup && isGlbMode) {
+                glbModelGroup.scale.set(1, 1, 1);
+                glbModelGroup.updateWorldMatrix(true, true);
+                if (measurePoints.length === 2) {
+                    updateMeasureDistance();
+                }
             }
         }
 
