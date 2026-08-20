@@ -3096,7 +3096,7 @@
 
                 const modelPath = window.glbPendingModelPath;
                 if (modelPath) {
-                    await loadGlbModel(modelPath, arAnchor);
+                    await loadGlbModel(modelPath, arAnchor, { centerModel: false });
                     window.glbPendingModelPath = null;
                     instructions.textContent = '点击模型添加测量点';
 
@@ -3576,8 +3576,10 @@
             // 处理不同模式下的模型射线检测
             if (isGlbMode && glbModelGroup) {
                 // GLB模式：遍历GLB模型组进行射线检测
+                // 注意：使用 child.isMesh 而非 child instanceof THREE.Mesh，
+                // 因为GLB模型网格由ESM Three.js创建，与全局THREE.Mesh非同一类
                 glbModelGroup.traverse((child) => {
-                    if (child instanceof THREE.Mesh) {
+                    if (child.isMesh) {
                         const childIntersects = raycaster.intersectObject(child);
                         intersects = intersects.concat(childIntersects);
                     }
@@ -3603,17 +3605,17 @@
                         return;
                     }
                 }
-            } else if (dropInViewer instanceof THREE.Group) {
+            } else if (dropInViewer && dropInViewer.type === 'Group') {
                 // 通用THREE.Group模型
                 dropInViewer.traverse((child) => {
-                    if (child instanceof THREE.Mesh) {
+                    if (child.isMesh) {
                         const childIntersects = raycaster.intersectObject(child);
                         intersects = intersects.concat(childIntersects);
                     }
                 });
             } else if (dropInViewer && dropInViewer.children && dropInViewer.children.length > 0) {
                 dropInViewer.children[0].traverse((child) => {
-                    if (child instanceof THREE.Mesh) {
+                    if (child.isMesh) {
                         const childIntersects = raycaster.intersectObject(child);
                         intersects = intersects.concat(childIntersects);
                     }
@@ -3921,7 +3923,7 @@
             
             if (isDesktopMode) {
                 // 桌面模式直接加载
-                await loadGlbModel(modelPath, scene);
+                await loadGlbModel(modelPath, scene, { centerModel: false });
             } else {
                 // AR模式：启动AR
                 if (!isARActive) {
