@@ -22,6 +22,11 @@ export default defineConfig({
         })
         this.emitFile({
           type: 'asset',
+          fileName: 'models/Merged_modified.glb',
+          source: require('fs').readFileSync(resolve(__dirname, 'models/Merged_modified.glb'))
+        })
+        this.emitFile({
+          type: 'asset',
           fileName: 'models/splat.ply',
           source: require('fs').readFileSync(resolve(__dirname, 'models/splat.ply'))
         })

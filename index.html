@@ -6,6 +6,20 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>WebAR地下管网Demo</title>
+    
+    <!-- 
+      Three.js Import Map
+      GLTFLoader.js 内部使用 import { ... } from 'three' 语法，
+      需要 importmap 将 'three' 映射到 CDN 的 ESM 版本，否则浏览器无法解析该裸模块标识符。
+    -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+        }
+    }
+    </script>
+    
     <style>
         * {
             margin: 0;
@@ -496,6 +510,187 @@
 
         #ply-back-btn:hover {
             background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* GLB子功能选择界面 */
+        #glb-submenu-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1011;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        #glb-submenu-overlay.hidden {
+            display: none;
+        }
+
+        #glb-back-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        #glb-back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* GLB模型加载状态指示器 */
+        #glb-loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1020;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            display: none;
+        }
+
+        #glb-loading-overlay.show {
+            display: flex;
+        }
+
+        #glb-loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #4ade80;
+            border-radius: 50%;
+            animation: glb-spin 0.8s linear infinite;
+        }
+
+        @keyframes glb-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        #glb-loading-text {
+            color: #fff;
+            font-size: 16px;
+            margin-top: 16px;
+            text-align: center;
+        }
+
+        #glb-loading-progress {
+            width: 200px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            margin-top: 12px;
+            overflow: hidden;
+        }
+
+        #glb-loading-progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #4ade80, #3b82f6);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        /* GLB动画控制面板 */
+        #glb-animation-panel {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1015;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 12px 20px;
+            display: none;
+            align-items: center;
+            gap: 12px;
+            color: #fff;
+            font-size: 13px;
+        }
+
+        #glb-animation-panel.show {
+            display: flex;
+        }
+
+        #glb-animation-panel button {
+            padding: 6px 14px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        #glb-animation-panel button:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        #glb-animation-panel button.active {
+            background: #3b82f6;
+            border-color: #3b82f6;
+        }
+
+        #glb-animation-name {
+            color: #aaa;
+            font-size: 12px;
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* GLB模型选择界面 */
+        #glb-model-select-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1012;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 20px;
+        }
+
+        #glb-model-select-overlay.hidden {
+            display: none;
+        }
+
+        #glb-model-select-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 20px;
+        }
+
+        #glb-model-list {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
         }
 
         /* 模型选择界面 */
@@ -1305,6 +1500,12 @@
             <div class="module-name">PLY编辑模式</div>
             <div class="module-desc">加载PLY模型并进行测量编辑，支持线段测量</div>
         </div>
+
+        <div class="module-card" id="glb-module-card">
+            <div class="module-icon">🧊</div>
+            <div class="module-name">GLB模型加载</div>
+            <div class="module-desc">加载和展示GLB格式的3D模型，支持纹理、材质和动画</div>
+        </div>
     </div>
 
     <!-- PLY子功能选择界面 -->
@@ -1325,6 +1526,59 @@
             <div class="module-name">桌面测试模式</div>
             <div class="module-desc">在桌面端测试3D模型渲染</div>
         </div>
+    </div>
+
+    <!-- GLB子功能选择界面 -->
+    <div id="glb-submenu-overlay" class="hidden">
+        <button id="glb-back-btn">← 返回</button>
+        
+        <div id="module-select-title">🧊 GLB模型加载</div>
+        <div id="module-select-subtitle">请选择运行模式</div>
+        
+        <div class="module-card" id="glb-ar-mode">
+            <div class="module-icon">📱</div>
+            <div class="module-name">AR模型加载</div>
+            <div class="module-desc">使用手机摄像头进行AR模型展示</div>
+        </div>
+        
+        <div class="module-card" id="glb-desktop-mode">
+            <div class="module-icon">🖥️</div>
+            <div class="module-name">桌面测试模式</div>
+            <div class="module-desc">在桌面端测试3D模型渲染</div>
+        </div>
+    </div>
+
+    <!-- GLB模型选择界面 -->
+    <div id="glb-model-select-overlay" class="hidden">
+        <button id="glb-model-select-back-btn">← 返回</button>
+        <div id="glb-model-select-title">选择GLB模型</div>
+        <div id="glb-model-list">
+            <div class="model-item" data-model="models/oblique.glb">
+                <div class="model-icon">🏗️</div>
+                <div class="model-name">oblique.glb</div>
+            </div>
+            <div class="model-item" data-model="models/Merged_modified.glb">
+                <div class="model-icon">🏛️</div>
+                <div class="model-name">Merged_modified.glb</div>
+            </div>
+        </div>
+        <button id="glb-model-select-btn">加载模型</button>
+    </div>
+
+    <!-- GLB模型加载状态指示器 -->
+    <div id="glb-loading-overlay">
+        <div id="glb-loading-spinner"></div>
+        <div id="glb-loading-text">正在加载GLB模型...</div>
+        <div id="glb-loading-progress">
+            <div id="glb-loading-progress-bar"></div>
+        </div>
+    </div>
+
+    <!-- GLB动画控制面板 -->
+    <div id="glb-animation-panel">
+        <button id="glb-anim-play-toggle">▶</button>
+        <span id="glb-animation-name">动画</span>
+        <span id="glb-animation-time">0:00</span>
     </div>
 
     <!-- 显示模式选择界面 -->
@@ -1544,10 +1798,18 @@
     <!-- 引入Three.js和相关库 -->
     <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
     <script src="libs/gaussian-splats-3d.umd.cjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
-
+    
+    <!-- 使用ES Module加载GLTFLoader（CDN方式，解决 examples/js/ 路径已废弃问题） -->
+    <script type="module">
+        import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+        window.__GLB_LOADER = GLTFLoader;
+        window.__ORBIT_CONTROLS = OrbitControls;
+        window.__THREE_ADDONS_LOADED = true;
+    </script>
+    
     <script>
-        // ==================== 全局变量与配置 ====================
+        // ==================== 全局变量 ====================
         let scene, camera, renderer;
         let currentLocation = null;
         let currentAccuracy = null;
@@ -1592,6 +1854,16 @@
         let measureLine = null;  // 测量线对象
         let measureAreaMesh = null;  // 面积测量面
         let measureAreaOutline = null;  // 面积测量轮廓线
+
+        // GLB模型加载相关变量
+        let isGlbMode = false;  // 是否处于GLB加载模式
+        let glbModelGroup = null;  // GLB模型组对象
+        let glbModelScene = null;  // GLB加载的scene对象
+        let glbMixer = null;  // 动画混合器
+        let glbAnimations = [];  // 动画列表
+        let glbCurrentAction = null;  // 当前动画动作
+        let glbIsAnimPlaying = true;  // 动画是否正在播放
+        let glbClock = new THREE.Clock();  // 动画时钟
 
         // 模型变换相关变量
         let modelTransform = {
@@ -2643,6 +2915,10 @@
             }
             splatLoaded = false;
             
+            // 清理GLB模型
+            cleanupGlbModel();
+            isGlbMode = false;
+            
             if (arAnchor) {
                 scene.remove(arAnchor);
                 arAnchor = null;
@@ -2693,6 +2969,13 @@
                 updateSplitView();
             } else {
                 renderer.render(scene, camera);
+            }
+            
+            // 更新GLB模型动画
+            if (glbMixer && glbIsAnimPlaying) {
+                const delta = glbClock.getDelta();
+                glbMixer.update(delta);
+                updateGlbAnimationTime();
             }
         }
 
@@ -2750,6 +3033,19 @@
                     createSplitLine();
                     instructions.textContent = '点击模型查看详情';
                     reticle.visible = false;
+                }
+            } else if (isGlbMode) {
+                // GLB模式：检测到地面后加载GLB模型
+                instructions.textContent = '正在加载GLB模型...';
+                reticle.visible = false;
+                
+                const modelPath = window.glbPendingModelPath;
+                if (modelPath) {
+                    await loadGlbModel(modelPath, arAnchor);
+                    window.glbPendingModelPath = null;
+                    instructions.textContent = 'GLB模型已加载';
+                } else {
+                    instructions.textContent = '请选择GLB模型';
                 }
             } else {
                 // AR管道模式：创建管网
@@ -2961,6 +3257,13 @@
                 updateSplitView();
             } else {
                 renderer.render(scene, camera);
+            }
+            
+            // 更新GLB模型动画
+            if (glbMixer && glbIsAnimPlaying) {
+                const delta = glbClock.getDelta();
+                glbMixer.update(delta);
+                updateGlbAnimationTime();
             }
         }
 
@@ -3278,6 +3581,434 @@
 
         function hideTransformPanel() {
             document.getElementById('model-transform-panel').classList.remove('show');
+        }
+
+        // ==================== GLB模型加载功能 ====================
+
+        function selectGlbMode(mode) {
+            document.getElementById('glb-submenu-overlay').classList.add('hidden');
+            
+            if (mode === 'desktop') {
+                // 桌面模式
+                isGlbMode = true;
+                isDesktopMode = true;
+                isARActive = false;
+                
+                moduleSelectOverlay.classList.add('hidden');
+                locationBar.style.display = 'none';
+                arButton.style.display = 'none';
+                overlay.classList.add('hidden');
+                
+                controls = createOrbitControls(camera, renderer.domElement);
+                createGridFloor();
+                
+                // 设置场景背景色，确保模型在深色背景下清晰可见
+                scene.background = new THREE.Color(0x1a1a2e);
+                
+                // 相机位置：与PLY桌面模式保持一致，确保能看到完整模型
+                camera.position.set(10, 10, 10);
+                camera.lookAt(0, 0, 0);
+                
+                // 启动渲染循环（关键修复：缺少此调用导致场景黑屏）
+                renderer.setAnimationLoop(desktopRender);
+                
+                // 显示GLB模型选择界面
+                document.getElementById('glb-model-select-overlay').classList.remove('hidden');
+            } else if (mode === 'ar') {
+                // AR模式
+                isGlbMode = true;
+                isDesktopMode = false;
+                isARActive = false;
+                
+                moduleSelectOverlay.classList.add('hidden');
+                locationBar.style.display = 'flex';
+                
+                // 先显示模型选择
+                document.getElementById('glb-model-select-overlay').classList.remove('hidden');
+            }
+        }
+
+        function selectGlbModel(event) {
+            // 清除之前的选择
+            document.querySelectorAll('#glb-model-list .model-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            // 选中当前项
+            event.currentTarget.classList.add('selected');
+            window.glbSelectedModelPath = event.currentTarget.dataset.model;
+        }
+
+        async function confirmGlbModelSelection() {
+            const modelPath = window.glbSelectedModelPath;
+            if (!modelPath) {
+                showTemporaryMessage('请先选择一个GLB模型');
+                return;
+            }
+            
+            document.getElementById('glb-model-select-overlay').classList.add('hidden');
+            
+            if (isDesktopMode) {
+                // 桌面模式直接加载
+                await loadGlbModel(modelPath, scene);
+            } else {
+                // AR模式：启动AR
+                if (!isARActive) {
+                    // 保存选择的模型路径，AR启动后加载
+                    window.glbPendingModelPath = modelPath;
+                    startGlbAR();
+                }
+            }
+        }
+
+        function showGlbLoading(message) {
+            const overlay = document.getElementById('glb-loading-overlay');
+            const text = document.getElementById('glb-loading-text');
+            text.textContent = message || '正在加载GLB模型...';
+            overlay.classList.add('show');
+        }
+
+        function hideGlbLoading() {
+            document.getElementById('glb-loading-overlay').classList.remove('show');
+        }
+
+        function updateGlbProgress(percent) {
+            const bar = document.getElementById('glb-loading-progress-bar');
+            if (bar) {
+                bar.style.width = Math.min(100, Math.max(0, percent)) + '%';
+            }
+        }
+
+        /**
+         * 加载GLB模型
+         * @param {string} modelPath - GLB模型文件路径
+         * @param {THREE.Group|THREE.Scene} parentGroup - 父级组对象
+         * @param {object} [options] - 可选配置
+         * @param {boolean} [options.centerModel=true] - 是否居中模型
+         * @param {boolean} [options.enableAnimations=true] - 是否启用动画
+         * @returns {Promise<THREE.Group|null>} 加载的模型组，失败返回null
+         */
+        async function loadGlbModel(modelPath, parentGroup, options = {}) {
+            const { centerModel = true, enableAnimations = true } = options;
+            
+            console.log('开始加载GLB模型:', modelPath);
+            showGlbLoading('正在加载GLB模型...');
+            updateGlbProgress(10);
+            
+            // 清理旧模型
+            cleanupGlbModel();
+            
+            try {
+                // 等待GLTFLoader加载完成（ES Module异步加载）
+                if (typeof window.__GLB_LOADER === 'undefined') {
+                    showGlbLoading('正在加载GLB模型解析器...');
+                    await new Promise((resolve) => {
+                        const checkLoader = () => {
+                            if (window.__GLB_LOADER) {
+                                resolve();
+                            } else {
+                                setTimeout(checkLoader, 50);
+                            }
+                        };
+                        // 超时保护（15秒）
+                        setTimeout(() => {
+                            if (!window.__GLB_LOADER) {
+                                console.warn('GLTFLoader加载超时，将尝试继续执行');
+                                resolve();
+                            }
+                        }, 15000);
+                        checkLoader();
+                    });
+                }
+                
+                // 检查GLTFLoader是否真的加载成功
+                if (typeof window.__GLB_LOADER === 'undefined') {
+                    throw new Error('GLTFLoader解析器加载超时，请检查网络连接');
+                }
+                
+                updateGlbProgress(20);
+                
+                const loader = new window.__GLB_LOADER();
+                
+                // 异步加载GLB文件
+                const gltf = await new Promise((resolve, reject) => {
+                    loader.load(
+                        modelPath,
+                        (gltf) => {
+                            updateGlbProgress(80);
+                            resolve(gltf);
+                        },
+                        (xhr) => {
+                            // 加载进度回调
+                            if (xhr.total > 0) {
+                                const progress = 20 + (xhr.loaded / xhr.total) * 60;
+                                updateGlbProgress(progress);
+                            }
+                        },
+                        (error) => {
+                            reject(new Error(`GLB模型加载失败: ${error.message || '未知错误'}`));
+                        }
+                    );
+                });
+                
+                updateGlbProgress(90);
+                console.log('GLB模型加载完成:', modelPath);
+                
+                // 保存场景引用
+                glbModelScene = gltf.scene;
+                
+                // 创建模型组，直接使用原始场景（避免 clone 丢失材质引用）
+                glbModelGroup = new THREE.Group();
+                glbModelGroup.add(glbModelScene);
+                
+                // 居中模型 - 确保世界矩阵已更新
+                if (centerModel) {
+                    glbModelGroup.updateWorldMatrix(true, true);
+                    const box = new THREE.Box3().setFromObject(glbModelGroup);
+                    const center = new THREE.Vector3();
+                    box.getCenter(center);
+                    glbModelGroup.position.sub(center);
+                }
+                
+                // 添加模型到父级
+                parentGroup.add(glbModelGroup);
+                
+                // 处理动画
+                if (enableAnimations && gltf.animations && gltf.animations.length > 0) {
+                    setupGlbAnimations(gltf.animations, glbModelGroup);
+                }
+                
+                // 刷新材质（保持原有 envMap 以支持 PBR 光照）
+                glbModelGroup.traverse((child) => {
+                    if (child.isMesh) {
+                        child.material.needsUpdate = true;
+                    }
+                });
+                
+                updateGlbProgress(100);
+                hideGlbLoading();
+                
+                showTemporaryMessage('GLB模型加载成功');
+                console.log('GLB模型加载成功:', modelPath);
+                
+                // 显示变换面板
+                showTransformPanel();
+                
+                // 显示动画面板（如果有动画）
+                if (glbAnimations.length > 0) {
+                    document.getElementById('glb-animation-panel').classList.add('show');
+                }
+                
+                return glbModelGroup;
+                
+            } catch (error) {
+                console.error('GLB模型加载失败:', error);
+                hideGlbLoading();
+                showTemporaryMessage('GLB模型加载失败: ' + (error.message || '未知错误'));
+                return null;
+            }
+        }
+
+        /**
+         * 设置GLB模型动画
+         * @param {Array} animations - GLTF动画数组
+         * @param {THREE.Object3D} root - 动画根对象
+         */
+        function setupGlbAnimations(animations, root) {
+            glbAnimations = animations;
+            glbMixer = new THREE.AnimationMixer(root);
+            
+            // 播放第一个动画
+            if (animations.length > 0) {
+                const anim = animations[0];
+                glbCurrentAction = glbMixer.clipAction(anim);
+                glbCurrentAction.play();
+                glbIsAnimPlaying = true;
+                
+                // 更新动画面板UI
+                const nameEl = document.getElementById('glb-animation-name');
+                const toggleBtn = document.getElementById('glb-anim-play-toggle');
+                nameEl.textContent = anim.name || '动画 1';
+                toggleBtn.textContent = '⏸';
+                toggleBtn.classList.add('active');
+                
+                console.log('GLB动画已启动:', anim.name || '未命名动画');
+            }
+        }
+
+        /** 切换GLB动画播放/暂停 */
+        function toggleGlbAnimation() {
+            if (!glbMixer || !glbCurrentAction) return;
+            
+            const toggleBtn = document.getElementById('glb-anim-play-toggle');
+            
+            if (glbIsAnimPlaying) {
+                glbCurrentAction.paused = true;
+                glbIsAnimPlaying = false;
+                toggleBtn.textContent = '▶';
+                toggleBtn.classList.remove('active');
+            } else {
+                glbCurrentAction.paused = false;
+                glbIsAnimPlaying = true;
+                toggleBtn.textContent = '⏸';
+                toggleBtn.classList.add('active');
+            }
+        }
+
+        /** 更新GLB动画时间显示 */
+        function updateGlbAnimationTime() {
+            if (!glbMixer || !glbCurrentAction) return;
+            
+            const timeEl = document.getElementById('glb-animation-time');
+            if (timeEl) {
+                const time = glbMixer.time;
+                const mins = Math.floor(time / 60);
+                const secs = Math.floor(time % 60);
+                timeEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
+        }
+
+        /**
+         * 清理GLB模型资源，释放GPU内存
+         */
+        function cleanupGlbModel() {
+            // 停止动画
+            if (glbMixer) {
+                glbMixer.stopAllAction();
+                glbMixer = null;
+            }
+            glbAnimations = [];
+            glbCurrentAction = null;
+            glbIsAnimPlaying = true;
+            glbClock = new THREE.Clock();
+            
+            // 隐藏动画面板
+            document.getElementById('glb-animation-panel').classList.remove('show');
+            
+            // 移除模型组
+            if (glbModelGroup) {
+                // 递归释放几何体和材质
+                glbModelGroup.traverse((child) => {
+                    if (child.isMesh) {
+                        if (child.geometry) {
+                            child.geometry.dispose();
+                        }
+                        if (child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(m => disposeMaterial(m));
+                            } else {
+                                disposeMaterial(child.material);
+                            }
+                        }
+                    }
+                });
+                
+                if (arAnchor) {
+                    arAnchor.remove(glbModelGroup);
+                } else {
+                    scene.remove(glbModelGroup);
+                }
+                glbModelGroup = null;
+            }
+            
+            glbModelScene = null;
+            
+            console.log('GLB模型资源已清理');
+        }
+
+        /**
+         * 释放材质资源
+         * @param {THREE.Material} material
+         */
+        function disposeMaterial(material) {
+            // 释放纹理
+            if (material.map) material.map.dispose();
+            if (material.normalMap) material.normalMap.dispose();
+            if (material.roughnessMap) material.roughnessMap.dispose();
+            if (material.metalnessMap) material.metalnessMap.dispose();
+            if (material.aoMap) material.aoMap.dispose();
+            if (material.emissiveMap) material.emissiveMap.dispose();
+            if (material.alphaMap) material.alphaMap.dispose();
+            if (material.bumpMap) material.bumpMap.dispose();
+            if (material.displacementMap) material.displacementMap.dispose();
+            if (material.envMap) material.envMap.dispose();
+            if (material.lightMap) material.lightMap.dispose();
+            
+            material.dispose();
+        }
+
+        /** 启动GLB AR模式 */
+        async function startGlbAR() {
+            try {
+                if (!navigator.xr) {
+                    showOverlay('❌', '不支持WebXR', '您的设备不支持WebXR');
+                    return;
+                }
+                
+                const isSupported = await navigator.xr.isSessionSupported('immersive-ar');
+                if (!isSupported) {
+                    showOverlay('❌', '不支持AR模式', '您的设备不支持沉浸式AR');
+                    return;
+                }
+                
+                // 隐藏模型选择界面
+                document.getElementById('glb-model-select-overlay').classList.add('hidden');
+                moduleSelectOverlay.classList.add('hidden');
+                locationBar.style.display = 'flex';
+                
+                overlay.classList.remove('hidden');
+                overlayIcon.textContent = '📱';
+                overlayTitle.textContent = '正在启动AR...';
+                overlayText.textContent = '请允许相机权限';
+                
+                const session = await navigator.xr.requestSession('immersive-ar', {
+                    requiredFeatures: ['hit-test', 'local-floor'],
+                    optionalFeatures: ['dom-overlay'],
+                    domOverlay: { root: document.body }
+                });
+                
+                xrSession = session;
+                renderer.xr.setSession(session);
+                
+                session.addEventListener('end', onSessionEnd);
+                
+                isARActive = true;
+                arButton.style.display = 'none';
+                overlay.classList.add('hidden');
+                
+                // 显示扫描提示
+                if (window.glbPendingModelPath) {
+                    instructions.style.display = 'block';
+                    instructions.textContent = '移动手机扫描地面';
+                }
+                
+                // 开始渲染循环
+                renderer.setAnimationLoop(render);
+                
+            } catch (error) {
+                console.error('GLB AR启动失败:', error);
+                showOverlay('❌', 'AR启动失败', '请确保设备支持AR并允许相机权限');
+            }
+        }
+
+        /** 清理GLB桌面模式（返回模块选择时调用） */
+        function exitGlbMode() {
+            // 停止渲染循环
+            if (isDesktopMode) {
+                renderer.setAnimationLoop(null);
+            }
+            
+            // 清理GLB模型资源
+            cleanupGlbModel();
+            
+            // 重置场景背景
+            scene.background = null;
+            
+            // 重置状态
+            isGlbMode = false;
+            isDesktopMode = false;
+            controls = null;
+            window.glbSelectedModelPath = null;
+            window.glbPendingModelPath = null;
         }
 
         // ==================== PLY模型加载功能 ====================
@@ -3980,6 +4711,10 @@
             } else if (module === 'ply-editor') {
                 // PLY编辑模式
                 startPlyEditorMode();
+            } else if (module === 'glb') {
+                // 显示GLB子菜单
+                moduleSelectOverlay.classList.add('hidden');
+                document.getElementById('glb-submenu-overlay').classList.remove('hidden');
             }
         }
 
@@ -4167,12 +4902,32 @@
             plyModuleCard.addEventListener('click', () => selectModule('ply'));
             pipelineModuleCard.addEventListener('click', () => selectModule('pipeline'));
             document.getElementById('ply-editor-module-card').addEventListener('click', () => selectModule('ply-editor'));
+            document.getElementById('glb-module-card').addEventListener('click', () => selectModule('glb'));
             plyBackBtn.addEventListener('click', () => {
                 plySubmenuOverlay.classList.add('hidden');
                 moduleSelectOverlay.classList.remove('hidden');
             });
             plyArMode.addEventListener('click', () => selectPlyMode('ar'));
             plyDesktopMode.addEventListener('click', () => selectPlyMode('desktop'));
+            
+            // GLB子功能事件
+            document.getElementById('glb-back-btn').addEventListener('click', () => {
+                document.getElementById('glb-submenu-overlay').classList.add('hidden');
+                moduleSelectOverlay.classList.remove('hidden');
+                // 退出GLB模式时清理资源
+                exitGlbMode();
+            });
+            document.getElementById('glb-ar-mode').addEventListener('click', () => selectGlbMode('ar'));
+            document.getElementById('glb-desktop-mode').addEventListener('click', () => selectGlbMode('desktop'));
+            document.getElementById('glb-model-select-back-btn').addEventListener('click', () => {
+                document.getElementById('glb-model-select-overlay').classList.add('hidden');
+                document.getElementById('glb-submenu-overlay').classList.remove('hidden');
+            });
+            document.getElementById('glb-model-select-btn').addEventListener('click', confirmGlbModelSelection);
+            // GLB模型列表点击选择
+            document.querySelectorAll('#glb-model-list .model-item').forEach(item => {
+                item.addEventListener('click', selectGlbModel);
+            });
             
             // 显示模式选择事件
             document.getElementById('display-mode-back-btn').addEventListener('click', () => {
@@ -4338,6 +5093,9 @@
             document.getElementById('scale-dec').addEventListener('click', () => changeScale(-modelTransform.scaleStep));
             
             document.getElementById('transform-reset').addEventListener('click', resetTransform);
+            
+            // GLB动画控制事件
+            document.getElementById('glb-anim-play-toggle').addEventListener('click', toggleGlbAnimation);
             
             // 变换面板显示/隐藏切换
             document.getElementById('transform-toggle').addEventListener('click', toggleTransformPanel);

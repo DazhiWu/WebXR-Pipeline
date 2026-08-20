@@ -11,6 +11,8 @@
 - ✅ **半透明透视效果**：管线默认地下半透明显示
 - ✅ **射线拾取交互**：点击管线弹窗展示详细信息
 - ✅ **多类型管线**：给水（蓝）、排水（灰）、燃气（橙）
+- ✅ **PLY 模型加载**：支持高斯泼溅 PLY 格式 3D 模型加载，AR/桌面双模式
+- ✅ **GLB 模型加载**：支持标准 GLB 格式 3D 模型加载，含纹理、材质和动画支持
 - ✅ **移动端适配**：自适应屏幕，禁止双击缩放，竖屏优化
 
 ## 技术栈
@@ -55,9 +57,23 @@ npm run dev
 
 ```
 WebXR2/
-├── index.html          # 主应用文件（包含所有 HTML/CSS/JS）
-├── package.json        # 项目配置
-└── README.md           # 项目文档
+├── index.html              # 主应用文件（包含所有 HTML/CSS/JS）
+├── package.json            # 项目配置
+├── vite.config.js          # Vite 构建配置
+├── README.md               # 项目文档
+├── tests/
+│   ├── glb-loader.test.js      # GLB 模型加载器单元测试
+│   └── glb-integration.test.js # GLB 模型加载集成测试
+├── models/
+│   ├── oblique.glb             # GLB 倾斜摄影模型
+│   ├── Merged_modified.glb              # GLB 合并模型
+│   ├── splat.ply               # PLY 高斯泼溅模型
+│   ├── splat2.ply              # PLY 高斯泼溅模型
+│   ├── living-room.ply         # PLY 室内场景模型
+│   └── flowerpat.ply           # PLY 花园场景模型
+├── libs/
+│   └── gaussian-splats-3d.umd.cjs  # 高斯泼溅库
+└── dist/                      # 构建输出目录
 ```
 
 ## 代码逻辑说明
@@ -108,6 +124,58 @@ WebXR2/
 - `Raycaster` 检测点击/触摸位置与管线的相交
 - 点击后弹出详情模态框
 - 显示管线类型、管径、材质、埋深、权属、起止坐标等
+
+### 8. GLB 模型加载模块
+
+#### 功能概述
+GLB 模型加载模块支持标准 GLB（GLTF Binary）格式文件的完整加载，与 PLY 模块共享统一的模型选择、加载状态反馈和变换控制界面。
+
+#### 核心函数
+
+| 函数 | 说明 |
+|------|------|
+| `loadGlbModel(modelPath, parentGroup, options)` | 异步加载 GLB 模型，支持进度回调 |
+| `cleanupGlbModel()` | 释放模型几何体、材质、纹理等 GPU 资源 |
+| `setupGlbAnimations(animations, root)` | 初始化动画混合器并播放首个动画 |
+| `toggleGlbAnimation()` | 切换动画播放/暂停状态 |
+| `disposeMaterial(material)` | 递归释放材质关联的所有纹理贴图 |
+
+#### 加载状态管理
+- **加载中**：显示旋转动画 + 进度条（基于 GLTFLoader 的 onProgress 回调）
+- **加载完成**：自动居中模型、显示变换面板、如有动画则显示动画面板
+- **加载失败**：显示错误提示信息，保持页面可交互
+
+#### 动画支持
+- 使用 `THREE.AnimationMixer` 管理骨骼动画/顶点动画
+- 底部浮动控制面板提供播放/暂停切换
+- 实时显示当前动画时间和名称
+- 在渲染循环中通过 `glbClock.getDelta()` 驱动动画更新
+
+#### 资源清理
+- `cleanupGlbModel()` 遍历模型树，释放所有 `BufferGeometry` 和 `Material`
+- 支持释放所有常见纹理贴图类型（map, normalMap, roughnessMap, metalnessMap, aoMap, emissiveMap, alphaMap, bumpMap, displacementMap, envMap, lightMap）
+- 停止并释放动画混合器 `AnimationMixer`
+- 从场景或 AR 锚点中移除模型组
+
+#### 性能优化
+- 模型异步加载，不阻塞主线程渲染
+- 纹理渲染优化：设置 `envMap=null`，使用场景光照而非环境贴图
+- 模型自动居中，保证初始位置合理
+- 加载完成后通过 `needsUpdate=true` 刷新材质
+
+#### 使用方式
+1. 在主界面选择「GLB模型加载」模块
+2. 选择「桌面测试模式」或「AR模型加载」
+3. 从模型列表中选择 GLB 文件
+4. 点击「加载模型」按钮
+5. 加载完成后可通过变换面板调整位置/旋转/缩放
+6. 如模型包含动画，底部动画面板将自动出现
+
+#### 注意事项
+- 确保 GLB 文件路径正确，支持本地和远程 URL
+- 大尺寸模型建议使用 Draco 压缩的 GLB 格式
+- AR 模式下需先检测到地面才能放置模型
+- 切换模型时会自动清理前一个模型的所有资源
 
 ## 部署步骤
 
