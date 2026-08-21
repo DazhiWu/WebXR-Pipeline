@@ -1498,6 +1498,101 @@
         .transform-reset-btn:hover {
             background: rgba(239, 68, 68, 0.4);
         }
+
+        /* 标记点控制面板 */
+        #marker-control-panel {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #marker-master-toggle {
+            width: 100%;
+            padding: 8px;
+            background: rgba(251, 191, 36, 0.2);
+            border: 1px solid rgba(251, 191, 36, 0.4);
+            border-radius: 8px;
+            color: #fbbf24;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        #marker-master-toggle:hover {
+            background: rgba(251, 191, 36, 0.35);
+        }
+
+        #marker-master-toggle.active {
+            background: rgba(251, 191, 36, 0.5);
+            border-color: #fbbf24;
+        }
+
+        #marker-sub-controls {
+            display: none;
+            margin-top: 8px;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            gap: 6px;
+            flex-direction: column;
+        }
+
+        #marker-sub-controls.show {
+            display: flex;
+        }
+
+        .marker-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 0;
+        }
+
+        .marker-toggle-label {
+            font-size: 12px;
+            color: #ccc;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .marker-toggle-label .marker-icon {
+            font-size: 14px;
+        }
+
+        .marker-toggle-switch {
+            position: relative;
+            width: 40px;
+            height: 22px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 11px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+            padding: 0;
+            flex-shrink: 0;
+        }
+
+        .marker-toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 18px;
+            height: 18px;
+            background: #fff;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+        }
+
+        .marker-toggle-switch.active {
+            background: #4ade80;
+        }
+
+        .marker-toggle-switch.active::after {
+            left: 20px;
+        }
     </style>
 </head>
 <body>
@@ -1916,6 +2011,37 @@
         
         <button class="transform-reset-btn" id="transform-reset">↺ 重置变换</button>
         <button class="transform-reset-btn" id="glb-measure-toggle" style="margin-top: 8px; background: rgba(74, 222, 128, 0.2); border-color: rgba(74, 222, 128, 0.4); color: #4ade80;">📏 测量模式</button>
+        
+        <!-- 标记点控制面板 -->
+        <div id="marker-control-panel">
+            <button id="marker-master-toggle">📍 标记点控制</button>
+            <div id="marker-sub-controls">
+                <div class="marker-toggle-row">
+                    <span class="marker-toggle-label">
+                        <span class="marker-icon">🔵</span> 测量标记点
+                    </span>
+                    <button class="marker-toggle-switch active" id="marker-toggle-measure" data-visible="true"></button>
+                </div>
+                <div class="marker-toggle-row">
+                    <span class="marker-toggle-label">
+                        <span class="marker-icon">📏</span> 测量线/面
+                    </span>
+                    <button class="marker-toggle-switch active" id="marker-toggle-lines" data-visible="true"></button>
+                </div>
+                <div class="marker-toggle-row">
+                    <span class="marker-toggle-label">
+                        <span class="marker-icon">🏷️</span> 距离标签
+                    </span>
+                    <button class="marker-toggle-switch active" id="marker-toggle-labels" data-visible="true"></button>
+                </div>
+                <div class="marker-toggle-row">
+                    <span class="marker-toggle-label">
+                        <span class="marker-icon">📍</span> 兴趣点 (POI)
+                    </span>
+                    <button class="marker-toggle-switch" id="marker-toggle-poi" data-visible="false"></button>
+                </div>
+            </div>
+        </div>
             </div>
     </div>
 
@@ -4006,6 +4132,7 @@
             });
             const marker = new THREE.Mesh(markerGeometry, markerMaterial);
             marker.position.copy(position);
+            marker.visible = markerVisibility.measure;
             measureGroup.add(marker);
             measurePointMarkers.push(marker);
 
@@ -4023,7 +4150,7 @@
         function updateMeasureDistance() {
             if (measurePoints.length === 2) {
                 measureLine.geometry.setFromPoints(measurePoints);
-                measureLine.visible = true;
+                measureLine.visible = markerVisibility.lines;
 
                 const distance = measurePoints[0].distanceTo(measurePoints[1]);
                 // 根据距离自动选择单位：<1米显示厘米，>=1米显示米
@@ -4062,7 +4189,7 @@
 
                 const pointsWithClose = [...measurePoints, measurePoints[0].clone()];
                 measureAreaOutline.geometry.setFromPoints(pointsWithClose);
-                measureAreaOutline.visible = true;
+                measureAreaOutline.visible = markerVisibility.lines;
 
                 const shape = new THREE.Shape();
                 if (measurePoints.length > 0) {
@@ -4083,7 +4210,7 @@
                 shapeGeometry.attributes.position.needsUpdate = true;
                 measureAreaMesh.geometry.dispose();
                 measureAreaMesh.geometry = shapeGeometry;
-                measureAreaMesh.visible = true;
+                measureAreaMesh.visible = markerVisibility.lines;
             } else {
                 document.getElementById('measure-area').textContent = '--';
                 measureAreaMesh.visible = false;
@@ -4374,6 +4501,7 @@
             glbMeasureDistanceLabel.scale.set(labelScale * 2.0, labelScale * 0.5, 1);
             glbMeasureDistanceLabel.position.copy(midPoint);
             glbMeasureDistanceLabel.position.y += 0.15; // 略微抬高避免遮挡测距线
+            glbMeasureDistanceLabel.visible = markerVisibility.labels;
 
             scene.add(glbMeasureDistanceLabel);
         }
@@ -4390,17 +4518,36 @@
         }
 
         function applyModelTransform() {
-            if (!dropInViewer) return;
-            
-            dropInViewer.position.x = modelBasePosition.x + modelTransform.position.x;
-            dropInViewer.position.y = modelBasePosition.y + modelTransform.position.y;
-            dropInViewer.position.z = modelBasePosition.z + modelTransform.position.z;
-            
-            dropInViewer.rotation.x = -Math.PI + modelTransform.rotation.x * Math.PI / 180;
-            dropInViewer.rotation.y = modelTransform.rotation.y * Math.PI / 180;
-            dropInViewer.rotation.z = modelTransform.rotation.z * Math.PI / 180;
-            
-            dropInViewer.scale.set(modelTransform.scale, modelTransform.scale, modelTransform.scale);
+            if (isGlbMode) {
+                if (!glbModelGroup) return;
+                glbModelGroup.position.set(
+                    modelTransform.position.x,
+                    modelTransform.position.y,
+                    modelTransform.position.z
+                );
+                glbModelGroup.rotation.set(
+                    modelTransform.rotation.x * Math.PI / 180,
+                    modelTransform.rotation.y * Math.PI / 180,
+                    modelTransform.rotation.z * Math.PI / 180
+                );
+                glbModelGroup.scale.set(
+                    glbModelScale * modelTransform.scale,
+                    glbModelScale * modelTransform.scale,
+                    glbModelScale * modelTransform.scale
+                );
+                glbModelGroup.updateWorldMatrix(true, true);
+            } else {
+                if (!dropInViewer) return;
+                dropInViewer.position.x = modelBasePosition.x + modelTransform.position.x;
+                dropInViewer.position.y = modelBasePosition.y + modelTransform.position.y;
+                dropInViewer.position.z = modelBasePosition.z + modelTransform.position.z;
+                
+                dropInViewer.rotation.x = -Math.PI + modelTransform.rotation.x * Math.PI / 180;
+                dropInViewer.rotation.y = modelTransform.rotation.y * Math.PI / 180;
+                dropInViewer.rotation.z = modelTransform.rotation.z * Math.PI / 180;
+                
+                dropInViewer.scale.set(modelTransform.scale, modelTransform.scale, modelTransform.scale);
+            }
             
             updateTransformUI();
         }
@@ -6086,6 +6233,13 @@
             // GLB测量模式切换
             document.getElementById('glb-measure-toggle').addEventListener('click', toggleGlbMeasureMode);
 
+            // 标记点控制事件
+            document.getElementById('marker-master-toggle').addEventListener('click', toggleMarkerMaster);
+            document.getElementById('marker-toggle-measure').addEventListener('click', () => toggleMarkerType('measure'));
+            document.getElementById('marker-toggle-lines').addEventListener('click', () => toggleMarkerType('lines'));
+            document.getElementById('marker-toggle-labels').addEventListener('click', () => toggleMarkerType('labels'));
+            document.getElementById('marker-toggle-poi').addEventListener('click', () => toggleMarkerType('poi'));
+
             // 单位校准比例控制
             document.getElementById('cal-scale-bigger').addEventListener('click', () => changeCalibrationScale(0.05));
             document.getElementById('cal-scale-smaller').addEventListener('click', () => changeCalibrationScale(-0.05));
@@ -6096,6 +6250,10 @@
                     if (isARActive) {
                         toggleArDebugMode();
                     }
+                }
+                // M 键切换标记点控制面板
+                if (e.key === 'm' || e.key === 'M') {
+                    toggleMarkerMaster();
                 }
             });
             
@@ -6175,6 +6333,161 @@
             } else {
                 showTemporaryMessage('请先加载GLB模型后再启用测量');
             }
+        }
+
+        // ==================== 标记点显隐控制 ====================
+        let markerVisibility = {
+            measure: true,    // 测量标记点
+            lines: true,      // 测量线/面
+            labels: true,     // 距离标签
+            poi: false        // 兴趣点(POI)
+        };
+        let poiMarkers = [];  // POI标记点数组（预留扩展）
+
+        /**
+         * 切换标记点主控制面板的显示/隐藏
+         */
+        function toggleMarkerMaster() {
+            const subControls = document.getElementById('marker-sub-controls');
+            const masterBtn = document.getElementById('marker-master-toggle');
+            
+            if (subControls.classList.contains('show')) {
+                subControls.classList.remove('show');
+                masterBtn.classList.remove('active');
+            } else {
+                subControls.classList.add('show');
+                masterBtn.classList.add('active');
+            }
+        }
+
+        /**
+         * 切换指定类型标记点的显隐状态
+         * @param {string} type - 标记点类型 ('measure' | 'lines' | 'labels' | 'poi')
+         * @param {boolean} [forceVisible] - 强制指定显隐状态，不传则切换
+         */
+        function toggleMarkerType(type, forceVisible) {
+            const visible = forceVisible !== undefined ? forceVisible : !markerVisibility[type];
+            markerVisibility[type] = visible;
+            
+            // 更新开关UI
+            const toggleBtn = document.getElementById('marker-toggle-' + type);
+            if (toggleBtn) {
+                toggleBtn.classList.toggle('active', visible);
+                toggleBtn.dataset.visible = visible ? 'true' : 'false';
+            }
+            
+            // 根据类型应用显隐
+            switch (type) {
+                case 'measure':
+                    // 测量标记点（measurePointMarkers 球体）
+                    if (measurePointMarkers && measurePointMarkers.length > 0) {
+                        measurePointMarkers.forEach(marker => {
+                            if (marker) marker.visible = visible;
+                        });
+                    }
+                    break;
+                    
+                case 'lines':
+                    // 测量线/面
+                    if (measureLine) measureLine.visible = visible && measurePoints.length === 2;
+                    if (measureAreaMesh) measureAreaMesh.visible = visible && measurePoints.length >= 3;
+                    if (measureAreaOutline) measureAreaOutline.visible = visible && measurePoints.length >= 3;
+                    break;
+                    
+                case 'labels':
+                    // 距离标签
+                    if (glbMeasureDistanceLabel) {
+                        glbMeasureDistanceLabel.visible = visible;
+                    }
+                    break;
+                    
+                case 'poi':
+                    // 兴趣点（预留扩展）
+                    if (poiMarkers && poiMarkers.length > 0) {
+                        poiMarkers.forEach(marker => {
+                            if (marker) marker.visible = visible;
+                        });
+                    }
+                    break;
+            }
+        }
+
+        /**
+         * 添加一个POI标记点（供扩展使用）
+         * @param {THREE.Vector3} position - 标记点位置
+         * @param {string} label - 标记点标签
+         * @param {THREE.Scene} targetScene - 目标场景（默认添加到scene）
+         * @returns {THREE.Object3D} 创建的POI标记对象
+         */
+        function addPoiMarker(position, label, targetScene) {
+            const target = targetScene || window.scene;
+            
+            // 创建POI球体标记
+            const geometry = new THREE.SphereGeometry(0.03, 16, 16);
+            const material = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
+            const marker = new THREE.Mesh(geometry, material);
+            marker.position.copy(position);
+            target.add(marker);
+            
+            // 创建POI标签（Sprite）
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.roundRect(0, 0, 256, 64, 8);
+            ctx.fill();
+            ctx.fillStyle = '#fbbf24';
+            ctx.font = 'bold 24px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label || 'POI', 128, 32);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.position.copy(position);
+            sprite.position.y += 0.1;
+            sprite.scale.set(0.4, 0.1, 1);
+            target.add(sprite);
+            
+            // 创建连接线（球体到标签）
+            const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+                position,
+                sprite.position.clone()
+            ]);
+            const lineMaterial = new THREE.LineBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.5 });
+            const line = new THREE.Line(lineGeometry, lineMaterial);
+            target.add(line);
+            
+            const poiGroup = new THREE.Group();
+            poiGroup.add(marker);
+            poiGroup.add(sprite);
+            poiGroup.add(line);
+            poiGroup.userData = { type: 'poi', position: position.clone() };
+            
+            // 应用当前显隐状态
+            poiGroup.visible = markerVisibility.poi;
+            
+            poiMarkers.push(poiGroup);
+            return poiGroup;
+        }
+
+        /**
+         * 移除所有POI标记点
+         */
+        function clearPoiMarkers() {
+            poiMarkers.forEach(group => {
+                window.scene.remove(group);
+                group.traverse(child => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (child.material.map) child.material.map.dispose();
+                        child.material.dispose();
+                    }
+                });
+            });
+            poiMarkers = [];
         }
 
         /**
