@@ -1290,6 +1290,84 @@
             text-shadow: 0 2px 4px rgba(0,0,0,0.5);
         }
 
+        /* 网格控制按钮栏 */
+        #grid-control-bar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: none;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 8px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            gap: 8px;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        #grid-control-bar.show {
+            display: flex;
+            animation: fadeInUp 0.3s ease;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        .grid-control-btn {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 8px 14px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            user-select: none;
+        }
+
+        .grid-control-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+        }
+
+        .grid-control-btn.active {
+            background: rgba(74, 222, 128, 0.25);
+            border-color: rgba(74, 222, 128, 0.5);
+            color: #4ade80;
+            box-shadow: 0 0 10px rgba(74, 222, 128, 0.15);
+        }
+
+        .grid-control-btn .icon {
+            font-size: 14px;
+        }
+
+        .grid-control-btn .label {
+            font-size: 11px;
+        }
+
+        .grid-control-separator {
+            width: 1px;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        /* 键盘快捷键提示 */
+        #grid-keyboard-hint {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.3);
+            margin-left: 4px;
+        }
+
         #ply-editor-back-btn {
             position: fixed;
             top: 20px;
@@ -1352,6 +1430,15 @@
             font-size: 14px;
             font-weight: 600;
             color: #fff;
+        }
+
+        .transform-hint {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.35);
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            letter-spacing: 0.3px;
         }
 
         .transform-toggle-btn {
@@ -1497,101 +1584,6 @@
 
         .transform-reset-btn:hover {
             background: rgba(239, 68, 68, 0.4);
-        }
-
-        /* 标记点控制面板 */
-        #marker-control-panel {
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        #marker-master-toggle {
-            width: 100%;
-            padding: 8px;
-            background: rgba(251, 191, 36, 0.2);
-            border: 1px solid rgba(251, 191, 36, 0.4);
-            border-radius: 8px;
-            color: #fbbf24;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-align: center;
-        }
-
-        #marker-master-toggle:hover {
-            background: rgba(251, 191, 36, 0.35);
-        }
-
-        #marker-master-toggle.active {
-            background: rgba(251, 191, 36, 0.5);
-            border-color: #fbbf24;
-        }
-
-        #marker-sub-controls {
-            display: none;
-            margin-top: 8px;
-            padding: 8px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            gap: 6px;
-            flex-direction: column;
-        }
-
-        #marker-sub-controls.show {
-            display: flex;
-        }
-
-        .marker-toggle-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 4px 0;
-        }
-
-        .marker-toggle-label {
-            font-size: 12px;
-            color: #ccc;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .marker-toggle-label .marker-icon {
-            font-size: 14px;
-        }
-
-        .marker-toggle-switch {
-            position: relative;
-            width: 40px;
-            height: 22px;
-            background: rgba(255, 255, 255, 0.15);
-            border-radius: 11px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            border: none;
-            padding: 0;
-            flex-shrink: 0;
-        }
-
-        .marker-toggle-switch::after {
-            content: '';
-            position: absolute;
-            top: 2px;
-            left: 2px;
-            width: 18px;
-            height: 18px;
-            background: #fff;
-            border-radius: 50%;
-            transition: all 0.2s ease;
-        }
-
-        .marker-toggle-switch.active {
-            background: #4ade80;
-        }
-
-        .marker-toggle-switch.active::after {
-            left: 20px;
         }
     </style>
 </head>
@@ -1948,6 +1940,7 @@
             <span class="transform-panel-title">⚙️ 模型变换</span>
             <button class="transform-toggle-btn" id="transform-toggle">▼</button>
         </div>
+        <div class="transform-hint">方向键:位移 | Q/E:旋转Y | [ ]:缩放 | R:重置</div>
         <div class="transform-content">
             <div class="transform-section">
                 <div class="transform-title">📐 位移 (Position)</div>
@@ -2011,37 +2004,6 @@
         
         <button class="transform-reset-btn" id="transform-reset">↺ 重置变换</button>
         <button class="transform-reset-btn" id="glb-measure-toggle" style="margin-top: 8px; background: rgba(74, 222, 128, 0.2); border-color: rgba(74, 222, 128, 0.4); color: #4ade80;">📏 测量模式</button>
-        
-        <!-- 标记点控制面板 -->
-        <div id="marker-control-panel">
-            <button id="marker-master-toggle">📍 标记点控制</button>
-            <div id="marker-sub-controls">
-                <div class="marker-toggle-row">
-                    <span class="marker-toggle-label">
-                        <span class="marker-icon">🔵</span> 测量标记点
-                    </span>
-                    <button class="marker-toggle-switch active" id="marker-toggle-measure" data-visible="true"></button>
-                </div>
-                <div class="marker-toggle-row">
-                    <span class="marker-toggle-label">
-                        <span class="marker-icon">📏</span> 测量线/面
-                    </span>
-                    <button class="marker-toggle-switch active" id="marker-toggle-lines" data-visible="true"></button>
-                </div>
-                <div class="marker-toggle-row">
-                    <span class="marker-toggle-label">
-                        <span class="marker-icon">🏷️</span> 距离标签
-                    </span>
-                    <button class="marker-toggle-switch active" id="marker-toggle-labels" data-visible="true"></button>
-                </div>
-                <div class="marker-toggle-row">
-                    <span class="marker-toggle-label">
-                        <span class="marker-icon">📍</span> 兴趣点 (POI)
-                    </span>
-                    <button class="marker-toggle-switch" id="marker-toggle-poi" data-visible="false"></button>
-                </div>
-            </div>
-        </div>
             </div>
     </div>
 
@@ -2079,6 +2041,21 @@
 
     <!-- 测量操作指引 -->
     <div id="measure-instructions">点击模型表面添加测量点</div>
+
+    <!-- 网格控制按钮栏 -->
+    <div id="grid-control-bar">
+        <button class="grid-control-btn active" id="grid-lines-toggle">
+            <span class="icon">▦</span>
+            <span class="label">网格线</span>
+        </button>
+        <div class="grid-control-separator"></div>
+        <button class="grid-control-btn active" id="grid-faces-toggle">
+            <span class="icon">▣</span>
+            <span class="label">网格面</span>
+        </button>
+        <div class="grid-control-separator"></div>
+        <span id="grid-keyboard-hint">G: 切换网格线 | F: 切换网格面</span>
+    </div>
 
     <!-- 引入Three.js和相关库 -->
     <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
@@ -2155,6 +2132,12 @@
         let groundPlaneIndicator = null;  // 地面网格指示器（AR可视化锚定位置）
         let arDebugGroup = null;  // AR调试可视化组
         let arDebugMode = false;  // AR调试模式开关
+
+        // 网格控制相关变量
+        let gridHelperRef = null;  // 网格辅助线引用
+        let gridGroundRef = null;  // 网格地面平面引用
+        let gridLinesVisible = true;  // 网格线可见性
+        let gridFacesVisible = true;  // 网格面可见性（地面平面）
 
         // 模型变换相关变量
         let modelTransform = {
@@ -3596,6 +3579,7 @@
             const gridHelper = new THREE.GridHelper(50, 100, 0x4ade80, 0x374151);
             gridHelper.position.y = -0.01;
             scene.add(gridHelper);
+            gridHelperRef = gridHelper;  // 保存引用
             
             // 创建地面平面（完全透明，不遮挡模型）
             const groundGeometry = new THREE.PlaneGeometry(50, 50);
@@ -3609,6 +3593,63 @@
             ground.rotation.x = -Math.PI / 2;
             ground.position.y = -0.02;
             scene.add(ground);
+            gridGroundRef = ground;  // 保存引用
+        }
+
+        // ==================== 网格控制功能 ====================
+        function toggleGridLines() {
+            if (!gridHelperRef) return;
+            gridLinesVisible = !gridLinesVisible;
+            gridHelperRef.visible = gridLinesVisible;
+            const btn = document.getElementById('grid-lines-toggle');
+            if (gridLinesVisible) {
+                btn.classList.add('active');
+                btn.querySelector('.label').textContent = '网格线';
+            } else {
+                btn.classList.remove('active');
+                btn.querySelector('.label').textContent = '网格线';
+            }
+        }
+
+        function toggleGridFaces() {
+            if (!gridGroundRef) return;
+            gridFacesVisible = !gridFacesVisible;
+            if (gridFacesVisible) {
+                // 恢复原始透明度（完全透明，因为地面平面默认可见时是透明的，显示网格底色）
+                gridGroundRef.material.opacity = 0;
+                gridGroundRef.material.transparent = true;
+                // 改为显示半透明地面
+                gridGroundRef.material.color.setHex(0x1f2937);
+                gridGroundRef.material.opacity = 0.15;
+            } else {
+                gridGroundRef.material.opacity = 0;
+            }
+            const btn = document.getElementById('grid-faces-toggle');
+            if (gridFacesVisible) {
+                btn.classList.add('active');
+                btn.querySelector('.label').textContent = '网格面';
+            } else {
+                btn.classList.remove('active');
+                btn.querySelector('.label').textContent = '网格面';
+            }
+        }
+
+        function showGridControlBar() {
+            document.getElementById('grid-control-bar').classList.add('show');
+            // 重置按钮状态
+            gridLinesVisible = true;
+            gridFacesVisible = true;
+            if (gridHelperRef) gridHelperRef.visible = true;
+            if (gridGroundRef) {
+                gridGroundRef.material.opacity = 0.15;
+                gridGroundRef.material.color.setHex(0x1f2937);
+            }
+            document.getElementById('grid-lines-toggle').classList.add('active');
+            document.getElementById('grid-faces-toggle').classList.add('active');
+        }
+
+        function hideGridControlBar() {
+            document.getElementById('grid-control-bar').classList.remove('show');
         }
 
         /**
@@ -4132,7 +4173,6 @@
             });
             const marker = new THREE.Mesh(markerGeometry, markerMaterial);
             marker.position.copy(position);
-            marker.visible = markerVisibility.measure;
             measureGroup.add(marker);
             measurePointMarkers.push(marker);
 
@@ -4150,7 +4190,7 @@
         function updateMeasureDistance() {
             if (measurePoints.length === 2) {
                 measureLine.geometry.setFromPoints(measurePoints);
-                measureLine.visible = markerVisibility.lines;
+                measureLine.visible = true;
 
                 const distance = measurePoints[0].distanceTo(measurePoints[1]);
                 // 根据距离自动选择单位：<1米显示厘米，>=1米显示米
@@ -4189,7 +4229,7 @@
 
                 const pointsWithClose = [...measurePoints, measurePoints[0].clone()];
                 measureAreaOutline.geometry.setFromPoints(pointsWithClose);
-                measureAreaOutline.visible = markerVisibility.lines;
+                measureAreaOutline.visible = true;
 
                 const shape = new THREE.Shape();
                 if (measurePoints.length > 0) {
@@ -4210,7 +4250,7 @@
                 shapeGeometry.attributes.position.needsUpdate = true;
                 measureAreaMesh.geometry.dispose();
                 measureAreaMesh.geometry = shapeGeometry;
-                measureAreaMesh.visible = markerVisibility.lines;
+                measureAreaMesh.visible = true;
             } else {
                 document.getElementById('measure-area').textContent = '--';
                 measureAreaMesh.visible = false;
@@ -4501,7 +4541,6 @@
             glbMeasureDistanceLabel.scale.set(labelScale * 2.0, labelScale * 0.5, 1);
             glbMeasureDistanceLabel.position.copy(midPoint);
             glbMeasureDistanceLabel.position.y += 0.15; // 略微抬高避免遮挡测距线
-            glbMeasureDistanceLabel.visible = markerVisibility.labels;
 
             scene.add(glbMeasureDistanceLabel);
         }
@@ -4518,35 +4557,27 @@
         }
 
         function applyModelTransform() {
-            if (isGlbMode) {
-                if (!glbModelGroup) return;
-                glbModelGroup.position.set(
-                    modelTransform.position.x,
-                    modelTransform.position.y,
-                    modelTransform.position.z
-                );
-                glbModelGroup.rotation.set(
-                    modelTransform.rotation.x * Math.PI / 180,
-                    modelTransform.rotation.y * Math.PI / 180,
-                    modelTransform.rotation.z * Math.PI / 180
-                );
-                glbModelGroup.scale.set(
-                    glbModelScale * modelTransform.scale,
-                    glbModelScale * modelTransform.scale,
-                    glbModelScale * modelTransform.scale
-                );
-                glbModelGroup.updateWorldMatrix(true, true);
-            } else {
-                if (!dropInViewer) return;
-                dropInViewer.position.x = modelBasePosition.x + modelTransform.position.x;
-                dropInViewer.position.y = modelBasePosition.y + modelTransform.position.y;
-                dropInViewer.position.z = modelBasePosition.z + modelTransform.position.z;
-                
-                dropInViewer.rotation.x = -Math.PI + modelTransform.rotation.x * Math.PI / 180;
-                dropInViewer.rotation.y = modelTransform.rotation.y * Math.PI / 180;
-                dropInViewer.rotation.z = modelTransform.rotation.z * Math.PI / 180;
-                
-                dropInViewer.scale.set(modelTransform.scale, modelTransform.scale, modelTransform.scale);
+            const target = glbModelGroup || dropInViewer;
+            if (!target) return;
+            
+            if (glbModelGroup) {
+                // GLB模型变换
+                target.position.x = modelBasePosition.x + modelTransform.position.x;
+                target.position.y = modelBasePosition.y + modelTransform.position.y;
+                target.position.z = modelBasePosition.z + modelTransform.position.z;
+                target.rotation.x = modelTransform.rotation.x * Math.PI / 180;
+                target.rotation.y = modelTransform.rotation.y * Math.PI / 180;
+                target.rotation.z = modelTransform.rotation.z * Math.PI / 180;
+                target.scale.set(modelTransform.scale, modelTransform.scale, modelTransform.scale);
+            } else if (dropInViewer) {
+                // PLY模型变换
+                target.position.x = modelBasePosition.x + modelTransform.position.x;
+                target.position.y = modelBasePosition.y + modelTransform.position.y;
+                target.position.z = modelBasePosition.z + modelTransform.position.z;
+                target.rotation.x = -Math.PI + modelTransform.rotation.x * Math.PI / 180;
+                target.rotation.y = modelTransform.rotation.y * Math.PI / 180;
+                target.rotation.z = modelTransform.rotation.z * Math.PI / 180;
+                target.scale.set(modelTransform.scale, modelTransform.scale, modelTransform.scale);
             }
             
             updateTransformUI();
@@ -4602,6 +4633,7 @@
                 
                 controls = createOrbitControls(camera, renderer.domElement);
                 createGridFloor();
+                showGridControlBar();  // 显示网格控制栏
                 
                 // 设置场景背景色，确保模型在深色背景下清晰可见
                 scene.background = new THREE.Color(0x1a1a2e);
@@ -5122,6 +5154,9 @@
             
             // 重置场景背景
             scene.background = null;
+            
+            // 隐藏网格控制栏
+            hideGridControlBar();
             
             // 重置状态
             isGlbMode = false;
@@ -6233,12 +6268,76 @@
             // GLB测量模式切换
             document.getElementById('glb-measure-toggle').addEventListener('click', toggleGlbMeasureMode);
 
-            // 标记点控制事件
-            document.getElementById('marker-master-toggle').addEventListener('click', toggleMarkerMaster);
-            document.getElementById('marker-toggle-measure').addEventListener('click', () => toggleMarkerType('measure'));
-            document.getElementById('marker-toggle-lines').addEventListener('click', () => toggleMarkerType('lines'));
-            document.getElementById('marker-toggle-labels').addEventListener('click', () => toggleMarkerType('labels'));
-            document.getElementById('marker-toggle-poi').addEventListener('click', () => toggleMarkerType('poi'));
+            // 网格控制事件
+            document.getElementById('grid-lines-toggle').addEventListener('click', toggleGridLines);
+            document.getElementById('grid-faces-toggle').addEventListener('click', toggleGridFaces);
+
+            // 键盘快捷键：G-网格线 F-网格面
+            document.addEventListener('keydown', (e) => {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+                if (e.key === 'g' || e.key === 'G') {
+                    e.preventDefault();
+                    toggleGridLines();
+                } else if (e.key === 'f' || e.key === 'F') {
+                    e.preventDefault();
+                    toggleGridFaces();
+                }
+                
+                // 模型变换键盘快捷键（仅在GLB模式下有效）
+                if (!isGlbMode && !dropInViewer) return;
+                const step = e.shiftKey ? 0.5 : 0.1;
+                const rotStep = e.shiftKey ? 15 : 5;
+                const sclStep = e.shiftKey ? 0.5 : 0.1;
+                switch (e.key) {
+                    case 'ArrowLeft':
+                        e.preventDefault();
+                        changePosition('x', -step);
+                        break;
+                    case 'ArrowRight':
+                        e.preventDefault();
+                        changePosition('x', step);
+                        break;
+                    case 'ArrowUp':
+                        e.preventDefault();
+                        changePosition('z', -step);
+                        break;
+                    case 'ArrowDown':
+                        e.preventDefault();
+                        changePosition('z', step);
+                        break;
+                    case 'PageUp':
+                        e.preventDefault();
+                        changePosition('y', step);
+                        break;
+                    case 'PageDown':
+                        e.preventDefault();
+                        changePosition('y', -step);
+                        break;
+                    case 'q':
+                    case 'Q':
+                        e.preventDefault();
+                        changeRotation('y', -rotStep);
+                        break;
+                    case 'e':
+                    case 'E':
+                        e.preventDefault();
+                        changeRotation('y', rotStep);
+                        break;
+                    case '[':
+                        e.preventDefault();
+                        changeScale(-sclStep);
+                        break;
+                    case ']':
+                        e.preventDefault();
+                        changeScale(sclStep);
+                        break;
+                    case 'r':
+                    case 'R':
+                        e.preventDefault();
+                        resetTransform();
+                        break;
+                }
+            });
 
             // 单位校准比例控制
             document.getElementById('cal-scale-bigger').addEventListener('click', () => changeCalibrationScale(0.05));
@@ -6250,10 +6349,6 @@
                     if (isARActive) {
                         toggleArDebugMode();
                     }
-                }
-                // M 键切换标记点控制面板
-                if (e.key === 'm' || e.key === 'M') {
-                    toggleMarkerMaster();
                 }
             });
             
@@ -6333,161 +6428,6 @@
             } else {
                 showTemporaryMessage('请先加载GLB模型后再启用测量');
             }
-        }
-
-        // ==================== 标记点显隐控制 ====================
-        let markerVisibility = {
-            measure: true,    // 测量标记点
-            lines: true,      // 测量线/面
-            labels: true,     // 距离标签
-            poi: false        // 兴趣点(POI)
-        };
-        let poiMarkers = [];  // POI标记点数组（预留扩展）
-
-        /**
-         * 切换标记点主控制面板的显示/隐藏
-         */
-        function toggleMarkerMaster() {
-            const subControls = document.getElementById('marker-sub-controls');
-            const masterBtn = document.getElementById('marker-master-toggle');
-            
-            if (subControls.classList.contains('show')) {
-                subControls.classList.remove('show');
-                masterBtn.classList.remove('active');
-            } else {
-                subControls.classList.add('show');
-                masterBtn.classList.add('active');
-            }
-        }
-
-        /**
-         * 切换指定类型标记点的显隐状态
-         * @param {string} type - 标记点类型 ('measure' | 'lines' | 'labels' | 'poi')
-         * @param {boolean} [forceVisible] - 强制指定显隐状态，不传则切换
-         */
-        function toggleMarkerType(type, forceVisible) {
-            const visible = forceVisible !== undefined ? forceVisible : !markerVisibility[type];
-            markerVisibility[type] = visible;
-            
-            // 更新开关UI
-            const toggleBtn = document.getElementById('marker-toggle-' + type);
-            if (toggleBtn) {
-                toggleBtn.classList.toggle('active', visible);
-                toggleBtn.dataset.visible = visible ? 'true' : 'false';
-            }
-            
-            // 根据类型应用显隐
-            switch (type) {
-                case 'measure':
-                    // 测量标记点（measurePointMarkers 球体）
-                    if (measurePointMarkers && measurePointMarkers.length > 0) {
-                        measurePointMarkers.forEach(marker => {
-                            if (marker) marker.visible = visible;
-                        });
-                    }
-                    break;
-                    
-                case 'lines':
-                    // 测量线/面
-                    if (measureLine) measureLine.visible = visible && measurePoints.length === 2;
-                    if (measureAreaMesh) measureAreaMesh.visible = visible && measurePoints.length >= 3;
-                    if (measureAreaOutline) measureAreaOutline.visible = visible && measurePoints.length >= 3;
-                    break;
-                    
-                case 'labels':
-                    // 距离标签
-                    if (glbMeasureDistanceLabel) {
-                        glbMeasureDistanceLabel.visible = visible;
-                    }
-                    break;
-                    
-                case 'poi':
-                    // 兴趣点（预留扩展）
-                    if (poiMarkers && poiMarkers.length > 0) {
-                        poiMarkers.forEach(marker => {
-                            if (marker) marker.visible = visible;
-                        });
-                    }
-                    break;
-            }
-        }
-
-        /**
-         * 添加一个POI标记点（供扩展使用）
-         * @param {THREE.Vector3} position - 标记点位置
-         * @param {string} label - 标记点标签
-         * @param {THREE.Scene} targetScene - 目标场景（默认添加到scene）
-         * @returns {THREE.Object3D} 创建的POI标记对象
-         */
-        function addPoiMarker(position, label, targetScene) {
-            const target = targetScene || window.scene;
-            
-            // 创建POI球体标记
-            const geometry = new THREE.SphereGeometry(0.03, 16, 16);
-            const material = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
-            const marker = new THREE.Mesh(geometry, material);
-            marker.position.copy(position);
-            target.add(marker);
-            
-            // 创建POI标签（Sprite）
-            const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 64;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.roundRect(0, 0, 256, 64, 8);
-            ctx.fill();
-            ctx.fillStyle = '#fbbf24';
-            ctx.font = 'bold 24px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(label || 'POI', 128, 32);
-            
-            const texture = new THREE.CanvasTexture(canvas);
-            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
-            const sprite = new THREE.Sprite(spriteMaterial);
-            sprite.position.copy(position);
-            sprite.position.y += 0.1;
-            sprite.scale.set(0.4, 0.1, 1);
-            target.add(sprite);
-            
-            // 创建连接线（球体到标签）
-            const lineGeometry = new THREE.BufferGeometry().setFromPoints([
-                position,
-                sprite.position.clone()
-            ]);
-            const lineMaterial = new THREE.LineBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.5 });
-            const line = new THREE.Line(lineGeometry, lineMaterial);
-            target.add(line);
-            
-            const poiGroup = new THREE.Group();
-            poiGroup.add(marker);
-            poiGroup.add(sprite);
-            poiGroup.add(line);
-            poiGroup.userData = { type: 'poi', position: position.clone() };
-            
-            // 应用当前显隐状态
-            poiGroup.visible = markerVisibility.poi;
-            
-            poiMarkers.push(poiGroup);
-            return poiGroup;
-        }
-
-        /**
-         * 移除所有POI标记点
-         */
-        function clearPoiMarkers() {
-            poiMarkers.forEach(group => {
-                window.scene.remove(group);
-                group.traverse(child => {
-                    if (child.geometry) child.geometry.dispose();
-                    if (child.material) {
-                        if (child.material.map) child.material.map.dispose();
-                        child.material.dispose();
-                    }
-                });
-            });
-            poiMarkers = [];
         }
 
         /**
