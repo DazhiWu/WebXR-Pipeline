@@ -399,6 +399,110 @@
             text-shadow: 0 2px 4px rgba(0,0,0,0.5);
         }
 
+        /* AR Debug HUD (仅 ?arDebug=1 时显示) */
+        #ar-debug-hud {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 2000;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            line-height: 1.5;
+            padding: 8px 10px;
+            max-height: 45vh;
+            overflow-y: auto;
+            display: none;
+            border-top: 2px solid #0f0;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        #ar-debug-hud.show {
+            display: block;
+        }
+        #ar-debug-hud .hud-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #0f0;
+        }
+        #ar-debug-hud .hud-title {
+            font-weight: bold;
+            color: #fff;
+            font-size: 13px;
+        }
+        #ar-debug-hud .hud-actions button {
+            background: #333;
+            color: #0f0;
+            border: 1px solid #0f0;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 10px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        #ar-debug-hud .hud-actions button:hover {
+            background: #0f0;
+            color: #000;
+        }
+        #ar-debug-hud .hud-section {
+            margin-bottom: 4px;
+        }
+        #ar-debug-hud .hud-section-title {
+            color: #888;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+        #ar-debug-hud .hud-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        #ar-debug-hud .hud-value {
+            color: #0f0;
+        }
+        #ar-debug-hud .hud-value.changed {
+            color: #ff0;
+            font-weight: bold;
+        }
+        #ar-debug-hud .hud-status {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        #ar-debug-hud .hud-status.stable {
+            background: #0f0;
+            color: #000;
+        }
+        #ar-debug-hud .hud-status.changed {
+            background: #f00;
+            color: #fff;
+            animation: blink 0.5s infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0.5; }
+        }
+        #ar-debug-hud .hud-copy-toast {
+            position: fixed;
+            bottom: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            color: #0f0;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 3000;
+            display: none;
+        }
+
         /* 模块选择界面 */
         #module-select-overlay {
             position: fixed;
@@ -1444,6 +1548,9 @@
     <div id="instructions" style="display: none;">
         移动手机扫描地面，点击管线查看详情
     </div>
+
+    <!-- AR调试开关按钮 -->
+    <button id="ar-debug-btn" style="display: none; position: fixed; bottom: 80px; right: 16px; z-index: 1500; width: 44px; height: 44px; border-radius: 50%; background: rgba(0,0,0,0.6); border: 2px solid rgba(0,255,0,0.5); color: #0f0; font-size: 16px; font-weight: bold; cursor: pointer; padding: 0; line-height: 44px; text-align: center; backdrop-filter: blur(4px);" title="切换AR调试模式" ontouchstart="event.stopPropagation();">D</button>
     
     <!-- 启动AR按钮 -->
     <button id="ar-button" disabled>启动AR</button>
@@ -1920,6 +2027,8 @@
         let glbMeasureMode = false;  // GLB模型模式是否启用测量工具
         let glbModelScale = 1.0;  // GLB模型校准比例（默认1.0=1单位=1米）
         let groundPlaneIndicator = null;  // 地面网格指示器（AR可视化锚定位置）
+        let arDebugGroup = null;  // AR调试可视化组
+        let arDebugMode = false;  // AR调试模式开关
 
         // 模型变换相关变量
         let modelTransform = {
@@ -2927,6 +3036,10 @@
                 // 开始渲染循环
                 renderer.setAnimationLoop(render);
                 
+                // 显示 AR 调试按钮
+                const debugBtn = document.getElementById('ar-debug-btn');
+                if (debugBtn) debugBtn.style.display = 'block';
+                
             } catch (error) {
                 console.error('AR启动失败:', error);
                 showOverlay('❌', 'AR启动失败', '请确保设备支持AR并允许相机权限');
@@ -2940,6 +3053,10 @@
             arButton.disabled = false;
             instructions.style.display = 'none';
             pipelineGroup.visible = false;
+            
+            // 隐藏 AR 调试按钮
+            const debugBtn = document.getElementById('ar-debug-btn');
+            if (debugBtn) debugBtn.style.display = 'none';
             
             // 重置AR会话状态，以便下次启动时重新初始化
             hitTestSourceRequested = false;
@@ -2992,6 +3109,16 @@
             
             // 清理地面网格指示器
             cleanupGroundPlaneIndicator();
+            
+            // 清理AR调试可视化
+            cleanupArDebugVisuals();
+            arDebugMode = false;
+            
+            // 停止 transform 监控
+            arMonitor.active = false;
+            arMonitor.snapshot = null;
+            arMonitor.changes = [];
+            showDebugHud(false);
             
             if (arAnchor) {
                 scene.remove(arAnchor);
@@ -3047,6 +3174,8 @@
                         hitTestSource.cancel();
                         hitTestSource = null;
                     }
+                    // 检查 transform 是否变化 (Debug HUD 监控)
+                    checkTransform();
                 }
             }
             
@@ -3077,6 +3206,11 @@
             
             // 在锚点位置创建地面网格指示器，用于可视化确认锚定位置
             createGroundPlaneIndicator(arAnchor);
+            
+            // 如果调试模式已开启，自动创建调试可视化
+            if (arDebugMode) {
+                createArDebugVisuals(arAnchor);
+            }
             
             if (isPlyMode) {
                 // PLY模式：如果已选择模型，直接加载并放置到地面
@@ -3424,6 +3558,342 @@
             }
         }
         
+        // ==================== AR调试可视化 ====================
+        function createArDebugVisuals(parentGroup) {
+            // 清理旧的调试可视化
+            cleanupArDebugVisuals();
+            
+            arDebugGroup = new THREE.Group();
+            arDebugGroup.name = 'AR_DEBUG';
+            
+            // 1. 醒目红色小球标记 Anchor 原点
+            const sphereGeo = new THREE.SphereGeometry(0.08, 16, 16);
+            const sphereMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+            sphere.position.set(0, 0, 0);
+            sphere.name = 'DEBUG_ANCHOR_SPHERE';
+            arDebugGroup.add(sphere);
+            
+            // 2. 1m x 1m GridHelper 显示 AR 世界坐标平面
+            const grid = new THREE.GridHelper(2, 20, 0xff4444, 0xff8888);
+            grid.position.y = 0.01;
+            grid.name = 'DEBUG_GRID';
+            arDebugGroup.add(grid);
+            
+            // 3. AxesHelper (0.5m 长)
+            const axes = new THREE.AxesHelper(0.5);
+            axes.position.y = 0.01;
+            axes.name = 'DEBUG_AXES';
+            arDebugGroup.add(axes);
+            
+            // 4. 半透明红色圆环，帮助识别锚点方向
+            const ringGeo = new THREE.RingGeometry(0.12, 0.18, 32);
+            const ringMat = new THREE.MeshBasicMaterial({
+                color: 0xff0000,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.6,
+                depthWrite: false
+            });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.y = 0.02;
+            ring.name = 'DEBUG_RING';
+            arDebugGroup.add(ring);
+            
+            parentGroup.add(arDebugGroup);
+            console.log('AR调试可视化已启用 - 红色小球标记锚点原点，网格为1m×1m');
+        }
+
+        function cleanupArDebugVisuals() {
+            if (arDebugGroup) {
+                if (arAnchor) {
+                    arAnchor.remove(arDebugGroup);
+                } else {
+                    scene.remove(arDebugGroup);
+                }
+                arDebugGroup.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+                arDebugGroup = null;
+            }
+        }
+
+        function toggleArDebugMode() {
+            arDebugMode = !arDebugMode;
+            const debugBtn = document.getElementById('ar-debug-btn');
+            
+            if (arDebugMode) {
+                if (arAnchor) {
+                    createArDebugVisuals(arAnchor);
+                }
+                showTemporaryMessage('AR调试模式: 已开启');
+                showDebugHud(true);
+                if (debugBtn) {
+                    debugBtn.textContent = 'X';
+                    debugBtn.style.background = 'rgba(255,0,0,0.6)';
+                    debugBtn.style.borderColor = 'rgba(255,0,0,0.8)';
+                    debugBtn.style.color = '#fff';
+                }
+            } else {
+                cleanupArDebugVisuals();
+                showTemporaryMessage('AR调试模式: 已关闭');
+                showDebugHud(false);
+                if (debugBtn) {
+                    debugBtn.textContent = 'D';
+                    debugBtn.style.background = 'rgba(0,0,0,0.6)';
+                    debugBtn.style.borderColor = 'rgba(0,255,0,0.5)';
+                    debugBtn.style.color = '#0f0';
+                }
+            }
+            console.log('AR Debug Mode:', arDebugMode);
+        }
+
+        // ==================== Transform 自动监控 + Debug HUD ====================
+        let arMonitor = {
+            active: false,
+            frameCount: 0,
+            snapshot: null,       // 放置时的初始快照
+            lastSnapshot: null,   // 上一次检查的快照
+            modelChanged: false,
+            rootChanged: false,
+            changes: []
+        };
+
+        function takeTransformSnapshot() {
+            if (!arAnchor || !glbModelGroup) return null;
+            return {
+                modelPos: glbModelGroup.position.clone(),
+                modelQuat: glbModelGroup.quaternion.clone(),
+                modelScl: glbModelGroup.scale.clone(),
+                modelMatrix: glbModelGroup.matrix.clone(),
+                modelMatrixWorld: glbModelGroup.matrixWorld.clone(),
+                rootPos: arAnchor.position.clone(),
+                rootQuat: arAnchor.quaternion.clone(),
+                rootScl: arAnchor.scale.clone(),
+                rootMatrix: arAnchor.matrix.clone(),
+                rootMatrixWorld: arAnchor.matrixWorld.clone(),
+                frame: arMonitor.frameCount,
+                time: performance.now()
+            };
+        }
+
+        function compareSnapshots(snap1, snap2) {
+            if (!snap1 || !snap2) return { changed: true };
+            const eps = 0.0001;
+            const modelPosDelta = snap1.modelPos.distanceTo(snap2.modelPos);
+            const modelRotDelta = snap1.modelQuat.angleTo(snap2.modelQuat);
+            const modelSclDelta = snap1.modelScl.distanceTo(snap2.modelScl);
+            const rootPosDelta = snap1.rootPos.distanceTo(snap2.rootPos);
+            const rootRotDelta = snap1.rootQuat.angleTo(snap2.rootQuat);
+            const rootSclDelta = snap1.rootScl.distanceTo(snap2.rootScl);
+            
+            return {
+                modelPosDelta,
+                modelRotDelta,
+                modelSclDelta,
+                rootPosDelta,
+                rootRotDelta,
+                rootSclDelta,
+                modelChanged: modelPosDelta > eps || modelRotDelta > eps || modelSclDelta > eps,
+                rootChanged: rootPosDelta > eps || rootRotDelta > eps || rootSclDelta > eps,
+                anyChanged: modelPosDelta > eps || modelRotDelta > eps || modelSclDelta > eps || 
+                           rootPosDelta > eps || rootRotDelta > eps || rootSclDelta > eps
+            };
+        }
+
+        function checkTransform() {
+            if (!arMonitor.active || !arAnchor) return;
+            
+            arMonitor.frameCount++;
+            const current = takeTransformSnapshot();
+            if (!current) return;
+            
+            // 每 30 帧检查一次变化
+            if (arMonitor.frameCount % 30 !== 0) return;
+            
+            // 与初始快照比较
+            if (arMonitor.snapshot) {
+                const delta = compareSnapshots(arMonitor.snapshot, current);
+                if (delta.modelChanged) {
+                    arMonitor.modelChanged = true;
+                }
+                if (delta.rootChanged) {
+                    arMonitor.rootChanged = true;
+                }
+                
+                // 记录变化详情
+                if (delta.anyChanged) {
+                    const changeRecord = {
+                        frame: arMonitor.frameCount,
+                        time: performance.now(),
+                        delta
+                    };
+                    arMonitor.changes.push(changeRecord);
+                    // 最多保留 20 条记录
+                    if (arMonitor.changes.length > 20) {
+                        arMonitor.changes.shift();
+                    }
+                    console.log('AR Transform Change Detected:', changeRecord);
+                }
+            }
+            
+            // 更新 HUD
+            updateDebugHud(current);
+        }
+
+        function initTransformMonitor() {
+            arMonitor.active = true;
+            arMonitor.frameCount = 0;
+            arMonitor.modelChanged = false;
+            arMonitor.rootChanged = false;
+            arMonitor.changes = [];
+            arMonitor.snapshot = null;
+            arMonitor.lastSnapshot = null;
+            
+            // 延迟几帧确保模型已完全加载和渲染
+            setTimeout(() => {
+                arMonitor.snapshot = takeTransformSnapshot();
+                console.log('AR Transform Monitor initialized. Snapshot taken.');
+                updateDebugHud(arMonitor.snapshot);
+            }, 500);
+        }
+
+        function showDebugHud(show) {
+            const hud = document.getElementById('ar-debug-hud');
+            if (hud) {
+                hud.classList.toggle('show', show);
+            }
+        }
+
+        function updateDebugHud(snapshot) {
+            if (!snapshot) return;
+            
+            const eps = 0.0001;
+            
+            // Model transform
+            setHud('hud-model-pos', `(${snapshot.modelPos.x.toFixed(4)}, ${snapshot.modelPos.y.toFixed(4)}, ${snapshot.modelPos.z.toFixed(4)})`);
+            setHud('hud-model-rot', `(${snapshot.modelQuat.x.toFixed(4)}, ${snapshot.modelQuat.y.toFixed(4)}, ${snapshot.modelQuat.z.toFixed(4)}, ${snapshot.modelQuat.w.toFixed(4)})`);
+            setHud('hud-model-scl', `(${snapshot.modelScl.x.toFixed(4)}, ${snapshot.modelScl.y.toFixed(4)}, ${snapshot.modelScl.z.toFixed(4)})`);
+            
+            // Root transform
+            setHud('hud-root-pos', `(${snapshot.rootPos.x.toFixed(4)}, ${snapshot.rootPos.y.toFixed(4)}, ${snapshot.rootPos.z.toFixed(4)})`);
+            setHud('hud-root-rot', `(${snapshot.rootQuat.x.toFixed(4)}, ${snapshot.rootQuat.y.toFixed(4)}, ${snapshot.rootQuat.z.toFixed(4)}, ${snapshot.rootQuat.w.toFixed(4)})`);
+            
+            // Delta since placement
+            if (arMonitor.snapshot && arMonitor.frameCount > 30) {
+                const delta = compareSnapshots(arMonitor.snapshot, snapshot);
+                setHud('hud-delta-model-pos', `(${delta.modelPosDelta.toFixed(6)}, ${delta.modelRotDelta.toFixed(6)}, ${delta.modelSclDelta.toFixed(6)})`);
+                setHud('hud-delta-root-pos', `${delta.rootPosDelta.toFixed(6)}`);
+                setHud('hud-delta-root-rot', `${delta.rootRotDelta.toFixed(6)}`);
+                setHud('hud-frames', `${arMonitor.frameCount}`);
+            }
+            
+            // Status
+            const modelStatus = arMonitor.modelChanged ? 'CHANGED' : 'STABLE';
+            const rootStatus = arMonitor.rootChanged ? 'CHANGED' : 'STABLE';
+            const hitStatus = hitTestSource ? 'ACTIVE' : 'STOPPED';
+            
+            const modelEl = document.getElementById('hud-status-model');
+            const rootEl = document.getElementById('hud-status-root');
+            const hitEl = document.getElementById('hud-status-hit');
+            if (modelEl) {
+                modelEl.textContent = modelStatus;
+                modelEl.className = 'hud-status ' + (arMonitor.modelChanged ? 'changed' : 'stable');
+            }
+            if (rootEl) {
+                rootEl.textContent = rootStatus;
+                rootEl.className = 'hud-status ' + (arMonitor.rootChanged ? 'changed' : 'stable');
+            }
+            if (hitEl) {
+                hitEl.textContent = hitStatus;
+                hitEl.className = 'hud-status ' + (hitTestSource ? 'changed' : 'stable');
+            }
+            
+            // Model center to anchor distance
+            if (arMonitor.snapshot) {
+                const dist = snapshot.modelPos.length();
+                setHud('hud-center-to-anchor', dist.toFixed(3));
+                const anchorDist = snapshot.rootPos.length();
+                setHud('hud-anchor-dist', anchorDist.toFixed(3));
+            }
+        }
+
+        function setHud(id, text) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = text;
+        }
+
+        function generateDebugReport() {
+            const lines = [];
+            lines.push('=== AR Debug Report ===');
+            lines.push(`Time: ${new Date().toISOString()}`);
+            lines.push(`Frames monitored: ${arMonitor.frameCount}`);
+            lines.push('');
+            
+            if (arMonitor.snapshot) {
+                const s = arMonitor.snapshot;
+                lines.push('--- INITIAL SNAPSHOT (placement) ---');
+                lines.push(`Model Position: (${s.modelPos.x.toFixed(6)}, ${s.modelPos.y.toFixed(6)}, ${s.modelPos.z.toFixed(6)})`);
+                lines.push(`Model Quaternion: (${s.modelQuat.x.toFixed(6)}, ${s.modelQuat.y.toFixed(6)}, ${s.modelQuat.z.toFixed(6)}, ${s.modelQuat.w.toFixed(6)})`);
+                lines.push(`Model Scale: (${s.modelScl.x.toFixed(6)}, ${s.modelScl.y.toFixed(6)}, ${s.modelScl.z.toFixed(6)})`);
+                lines.push(`Root Position: (${s.rootPos.x.toFixed(6)}, ${s.rootPos.y.toFixed(6)}, ${s.rootPos.z.toFixed(6)})`);
+                lines.push(`Root Quaternion: (${s.rootQuat.x.toFixed(6)}, ${s.rootQuat.y.toFixed(6)}, ${s.rootQuat.z.toFixed(6)}, ${s.rootQuat.w.toFixed(6)})`);
+                lines.push(`Root Scale: (${s.rootScl.x.toFixed(6)}, ${s.rootScl.y.toFixed(6)}, ${s.rootScl.z.toFixed(6)})`);
+            }
+            
+            lines.push('');
+            lines.push('--- STATUS ---');
+            lines.push(`Model Transform: ${arMonitor.modelChanged ? 'CHANGED' : 'STABLE'}`);
+            lines.push(`Root Transform: ${arMonitor.rootChanged ? 'CHANGED' : 'STABLE'}`);
+            lines.push(`Hit Test Active: ${hitTestSource ? 'YES' : 'NO'}`);
+            
+            if (arMonitor.changes.length > 0) {
+                lines.push('');
+                lines.push('--- TRANSFORM CHANGES DETECTED ---');
+                arMonitor.changes.forEach((c, i) => {
+                    lines.push(`Change #${i+1} (frame ${c.frame}):`);
+                    if (c.delta.modelChanged) {
+                        lines.push(`  Model: posDelta=${c.delta.modelPosDelta.toFixed(6)}, rotDelta=${c.delta.modelRotDelta.toFixed(6)}, sclDelta=${c.delta.modelSclDelta.toFixed(6)}`);
+                    }
+                    if (c.delta.rootChanged) {
+                        lines.push(`  Root: posDelta=${c.delta.rootPosDelta.toFixed(6)}, rotDelta=${c.delta.rootRotDelta.toFixed(6)}, sclDelta=${c.delta.rootSclDelta.toFixed(6)}`);
+                    }
+                });
+            }
+            
+            lines.push('');
+            lines.push('--- GLB MODEL INFO (from static analysis) ---');
+            lines.push('oblique.glb: size=(1.89, 2.00, 1.80), center=(-0.002, -0.187, 0.000), radius=1.64m');
+            lines.push('Merged_modified.glb: size=(16.61, 9.98, 7.52), center=(-0.829, -4.465, 0.194), radius=10.39m');
+            lines.push('Merged_modified.glb root node has position offset (0, -4.1709, 0)');
+            
+            lines.push('');
+            lines.push('=== End Report ===');
+            return lines.join('\n');
+        }
+
+        function copyDebugReport() {
+            const report = generateDebugReport();
+            navigator.clipboard.writeText(report).then(() => {
+                const toast = document.getElementById('hud-copy-toast');
+                if (toast) {
+                    toast.style.display = 'block';
+                    setTimeout(() => { toast.style.display = 'none'; }, 2000);
+                }
+            }).catch(() => {
+                // Fallback for environments without clipboard API
+                const textarea = document.createElement('textarea');
+                textarea.value = report;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+            });
+        }
+        // ==================== END Transform Monitor ====================
+
         function desktopRender() {
             if (controls) {
                 controls.update();
@@ -4193,6 +4663,54 @@
                 showTemporaryMessage('GLB模型加载成功');
                 console.log('GLB模型加载成功:', modelPath);
 
+                // ==================== AR DEBUG: GLB模型诊断信息 ====================
+                if (isARActive) {
+                    // 等待一帧让 world matrix 更新完毕
+                    requestAnimationFrame(() => {
+                        glbModelGroup.updateWorldMatrix(true, true);
+                        const box = new THREE.Box3().setFromObject(glbModelGroup);
+                        const size = new THREE.Vector3();
+                        const center = new THREE.Vector3();
+                        box.getSize(size);
+                        box.getCenter(center);
+                        const sphere = new THREE.Sphere();
+                        box.getBoundingSphere(sphere);
+                        
+                        // 存储模型尺寸信息用于 HUD 显示
+                        window.__lastGlbModelInfo = {
+                            size: { x: size.x, y: size.y, z: size.z },
+                            center: { x: center.x, y: center.y, z: center.z },
+                            radius: sphere.radius,
+                            modelPath: modelPath
+                        };
+                        
+                        // 更新 HUD 中的模型尺寸显示
+                        setHud('hud-size-x', size.x.toFixed(3) + 'm');
+                        setHud('hud-size-y', size.y.toFixed(3) + 'm');
+                        setHud('hud-size-z', size.z.toFixed(3) + 'm');
+                        setHud('hud-center', `(${center.x.toFixed(3)}, ${center.y.toFixed(3)}, ${center.z.toFixed(3)})`);
+                        
+                        console.log('========== AR GLB DEBUG ==========');
+                        console.log('模型路径:', modelPath);
+                        console.log('BoundingBox size (米):', size.x.toFixed(3), size.y.toFixed(3), size.z.toFixed(3));
+                        console.log('BoundingBox center (米):', center.x.toFixed(3), center.y.toFixed(3), center.z.toFixed(3));
+                        console.log('BoundingSphere radius (米):', sphere.radius.toFixed(3));
+                        console.log('glbModelGroup.position:', glbModelGroup.position.x.toFixed(3), glbModelGroup.position.y.toFixed(3), glbModelGroup.position.z.toFixed(3));
+                        console.log('glbModelGroup.scale:', glbModelGroup.scale.x.toFixed(3), glbModelGroup.scale.y.toFixed(3), glbModelGroup.scale.z.toFixed(3));
+                        console.log('glbModelGroup.quaternion:', glbModelGroup.quaternion.x.toFixed(3), glbModelGroup.quaternion.y.toFixed(3), glbModelGroup.quaternion.z.toFixed(3), glbModelGroup.quaternion.w.toFixed(3));
+                        console.log('arAnchor.position:', arAnchor.position.x.toFixed(3), arAnchor.position.y.toFixed(3), arAnchor.position.z.toFixed(3));
+                        console.log('arAnchor.quaternion:', arAnchor.quaternion.x.toFixed(3), arAnchor.quaternion.y.toFixed(3), arAnchor.quaternion.z.toFixed(3), arAnchor.quaternion.w.toFixed(3));
+                        console.log('模型中心到锚点距离:', center.length().toFixed(3), '米');
+                        console.log('===================================');
+                    });
+                }
+                // ==================== END DEBUG ====================
+
+                // 在AR模式下初始化 transform 监控 (Debug HUD)
+                if (isARActive && arDebugMode) {
+                    initTransformMonitor();
+                }
+
                 // 在桌面模式下自动初始化测量工具
                 if (isDesktopMode) {
                     initGlbMeasureTool();
@@ -4434,6 +4952,10 @@
                 
                 // 开始渲染循环
                 renderer.setAnimationLoop(render);
+                
+                // 显示 AR 调试按钮
+                const debugBtn = document.getElementById('ar-debug-btn');
+                if (debugBtn) debugBtn.style.display = 'block';
                 
             } catch (error) {
                 console.error('GLB AR启动失败:', error);
@@ -5310,6 +5832,13 @@
 
         // ==================== 主初始化函数 ====================
         async function init() {
+            // 检查URL参数：?arDebug=1 启用AR调试模式
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('arDebug') === '1') {
+                arDebugMode = true;
+                console.log('AR调试模式已通过URL参数启用 (?arDebug=1)');
+            }
+            
             // 加载保存的校准参数
             loadCalibration();
             
@@ -5560,6 +6089,44 @@
             // 单位校准比例控制
             document.getElementById('cal-scale-bigger').addEventListener('click', () => changeCalibrationScale(0.05));
             document.getElementById('cal-scale-smaller').addEventListener('click', () => changeCalibrationScale(-0.05));
+
+            // 键盘快捷键: D 键切换AR调试模式
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'd' || e.key === 'D') {
+                    if (isARActive) {
+                        toggleArDebugMode();
+                    }
+                }
+            });
+            
+            // Debug HUD 按钮事件
+            document.getElementById('hud-copy-report').addEventListener('click', copyDebugReport);
+            document.getElementById('hud-close').addEventListener('click', () => {
+                showDebugHud(false);
+            });
+            
+            // AR 调试按钮（手机端可用）
+            const debugBtn = document.getElementById('ar-debug-btn');
+            if (debugBtn) {
+                debugBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (isARActive) {
+                        toggleArDebugMode();
+                    }
+                });
+                // 同时也支持 touch 事件
+                debugBtn.addEventListener('touchstart', (e) => {
+                    e.stopPropagation();
+                    if (isARActive) {
+                        toggleArDebugMode();
+                    }
+                });
+            }
+
+            // 如果 URL 参数启用了 arDebugMode，自动显示 HUD
+            if (arDebugMode) {
+                showDebugHud(true);
+            }
         }
 
         function toggleTransformPanel() {
@@ -5654,5 +6221,84 @@
         // 启动应用
         init();
     </script>
+
+    <!-- ==================== AR Debug HUD ==================== -->
+    <div id="ar-debug-hud">
+        <div class="hud-header">
+            <span class="hud-title">AR DEBUG</span>
+            <div class="hud-actions">
+                <button id="hud-copy-report">Copy Debug Report</button>
+                <button id="hud-close">Close</button>
+            </div>
+        </div>
+        <div class="hud-section">
+            <div class="hud-section-title">MODEL (glbModelGroup)</div>
+            <div class="hud-row">
+                <span>Position:</span><span class="hud-value" id="hud-model-pos">--</span>
+            </div>
+            <div class="hud-row">
+                <span>Rotation:</span><span class="hud-value" id="hud-model-rot">--</span>
+            </div>
+            <div class="hud-row">
+                <span>Scale:</span><span class="hud-value" id="hud-model-scl">--</span>
+            </div>
+        </div>
+        <div class="hud-section">
+            <div class="hud-section-title">PLACEMENT ROOT (arAnchor)</div>
+            <div class="hud-row">
+                <span>Position:</span><span class="hud-value" id="hud-root-pos">--</span>
+            </div>
+            <div class="hud-row">
+                <span>Quaternion:</span><span class="hud-value" id="hud-root-rot">--</span>
+            </div>
+        </div>
+        <div class="hud-section">
+            <div class="hud-section-title">DELTA SINCE PLACEMENT</div>
+            <div class="hud-row">
+                <span>Model Pos:</span><span class="hud-value" id="hud-delta-model-pos">--</span>
+            </div>
+            <div class="hud-row">
+                <span>Root Pos:</span><span class="hud-value" id="hud-delta-root-pos">--</span>
+            </div>
+            <div class="hud-row">
+                <span>Root Rot:</span><span class="hud-value" id="hud-delta-root-rot">--</span>
+            </div>
+            <div class="hud-row">
+                <span>Frames:</span><span class="hud-value" id="hud-frames">0</span>
+            </div>
+        </div>
+        <div class="hud-section">
+            <div class="hud-section-title">MODEL SIZE (from GLB analysis)</div>
+            <div class="hud-row">
+                <span>X:</span><span class="hud-value" id="hud-size-x">--</span>
+                <span>Y:</span><span class="hud-value" id="hud-size-y">--</span>
+                <span>Z:</span><span class="hud-value" id="hud-size-z">--</span>
+            </div>
+            <div class="hud-row">
+                <span>Center:</span><span class="hud-value" id="hud-center">--</span>
+            </div>
+        </div>
+        <div class="hud-section">
+            <div class="hud-section-title">STATUS</div>
+            <div class="hud-row">
+                <span>Model Transform:</span>
+                <span class="hud-status" id="hud-status-model">WAITING</span>
+            </div>
+            <div class="hud-row">
+                <span>Root Transform:</span>
+                <span class="hud-status" id="hud-status-root">WAITING</span>
+            </div>
+            <div class="hud-row">
+                <span>Hit Test Active:</span>
+                <span class="hud-status" id="hud-status-hit">WAITING</span>
+            </div>
+        </div>
+        <div class="hud-section" style="font-size:10px;color:#888;margin-top:4px;">
+            ModelCenterToAnchor: <span id="hud-center-to-anchor">--</span> m
+            &nbsp;|&nbsp; AnchorDist: <span id="hud-anchor-dist">--</span> m
+        </div>
+    </div>
+    <div id="hud-copy-toast" class="hud-copy-toast">Copied!</div>
+    <!-- ==================== END Debug HUD ==================== -->
 </body>
 </html>
