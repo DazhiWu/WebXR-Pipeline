@@ -1361,13 +1361,6 @@
             background: rgba(255, 255, 255, 0.15);
         }
 
-        /* 键盘快捷键提示 */
-        #grid-keyboard-hint {
-            font-size: 10px;
-            color: rgba(255, 255, 255, 0.3);
-            margin-left: 4px;
-        }
-
         #ply-editor-back-btn {
             position: fixed;
             top: 20px;
@@ -1430,15 +1423,6 @@
             font-size: 14px;
             font-weight: 600;
             color: #fff;
-        }
-
-        .transform-hint {
-            font-size: 10px;
-            color: rgba(255, 255, 255, 0.35);
-            margin-bottom: 10px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-            letter-spacing: 0.3px;
         }
 
         .transform-toggle-btn {
@@ -1940,7 +1924,6 @@
             <span class="transform-panel-title">⚙️ 模型变换</span>
             <button class="transform-toggle-btn" id="transform-toggle">▼</button>
         </div>
-        <div class="transform-hint">方向键:位移 | Q/E:旋转Y | [ ]:缩放 | R:重置</div>
         <div class="transform-content">
             <div class="transform-section">
                 <div class="transform-title">📐 位移 (Position)</div>
@@ -2053,8 +2036,6 @@
             <span class="icon">▣</span>
             <span class="label">网格面</span>
         </button>
-        <div class="grid-control-separator"></div>
-        <span id="grid-keyboard-hint">G: 切换网格线 | F: 切换网格面</span>
     </div>
 
     <!-- 引入Three.js和相关库 -->
@@ -2134,10 +2115,12 @@
         let arDebugMode = false;  // AR调试模式开关
 
         // 网格控制相关变量
-        let gridHelperRef = null;  // 网格辅助线引用
-        let gridGroundRef = null;  // 网格地面平面引用
+        let gridHelperRef = null;  // 网格辅助线引用（桌面模式）
+        let gridGroundRef = null;  // 网格地面平面引用（桌面模式）
+        let arGridHelperRef = null;  // AR模式网格辅助线引用
+        let arGridFacesRef = null;  // AR模式网格面引用（环+点）
         let gridLinesVisible = true;  // 网格线可见性
-        let gridFacesVisible = true;  // 网格面可见性（地面平面）
+        let gridFacesVisible = true;  // 网格面可见性
 
         // 模型变换相关变量
         let modelTransform = {
@@ -3316,6 +3299,9 @@
             // 在锚点位置创建地面网格指示器，用于可视化确认锚定位置
             createGroundPlaneIndicator(arAnchor);
             
+            // 显示网格控制栏（AR模式也支持网格控制）
+            showGridControlBar();
+            
             // 如果调试模式已开启，自动创建调试可视化
             if (arDebugMode) {
                 createArDebugVisuals(arAnchor);
@@ -3598,39 +3584,50 @@
 
         // ==================== 网格控制功能 ====================
         function toggleGridLines() {
-            if (!gridHelperRef) return;
             gridLinesVisible = !gridLinesVisible;
-            gridHelperRef.visible = gridLinesVisible;
+            if (isARActive && arGridHelperRef) {
+                // AR模式：控制地面网格指示器的网格线
+                arGridHelperRef.visible = gridLinesVisible;
+            } else if (gridHelperRef) {
+                // 桌面模式：控制网格辅助线
+                gridHelperRef.visible = gridLinesVisible;
+            }
+            updateGridLineBtnState();
+        }
+
+        function updateGridLineBtnState() {
             const btn = document.getElementById('grid-lines-toggle');
             if (gridLinesVisible) {
                 btn.classList.add('active');
-                btn.querySelector('.label').textContent = '网格线';
             } else {
                 btn.classList.remove('active');
-                btn.querySelector('.label').textContent = '网格线';
             }
         }
 
         function toggleGridFaces() {
-            if (!gridGroundRef) return;
             gridFacesVisible = !gridFacesVisible;
-            if (gridFacesVisible) {
-                // 恢复原始透明度（完全透明，因为地面平面默认可见时是透明的，显示网格底色）
-                gridGroundRef.material.opacity = 0;
-                gridGroundRef.material.transparent = true;
-                // 改为显示半透明地面
-                gridGroundRef.material.color.setHex(0x1f2937);
-                gridGroundRef.material.opacity = 0.15;
-            } else {
-                gridGroundRef.material.opacity = 0;
+            if (isARActive && arGridFacesRef) {
+                // AR模式：控制地面网格指示器的环和点
+                arGridFacesRef.ring.visible = gridFacesVisible;
+                arGridFacesRef.dot.visible = gridFacesVisible;
+            } else if (gridGroundRef) {
+                // 桌面模式：控制地面平面透明度
+                if (gridFacesVisible) {
+                    gridGroundRef.material.color.setHex(0x1f2937);
+                    gridGroundRef.material.opacity = 0.15;
+                } else {
+                    gridGroundRef.material.opacity = 0;
+                }
             }
+            updateGridFaceBtnState();
+        }
+
+        function updateGridFaceBtnState() {
             const btn = document.getElementById('grid-faces-toggle');
             if (gridFacesVisible) {
                 btn.classList.add('active');
-                btn.querySelector('.label').textContent = '网格面';
             } else {
                 btn.classList.remove('active');
-                btn.querySelector('.label').textContent = '网格面';
             }
         }
 
@@ -3639,13 +3636,21 @@
             // 重置按钮状态
             gridLinesVisible = true;
             gridFacesVisible = true;
-            if (gridHelperRef) gridHelperRef.visible = true;
-            if (gridGroundRef) {
-                gridGroundRef.material.opacity = 0.15;
-                gridGroundRef.material.color.setHex(0x1f2937);
+            if (isARActive) {
+                if (arGridHelperRef) arGridHelperRef.visible = true;
+                if (arGridFacesRef) {
+                    arGridFacesRef.ring.visible = true;
+                    arGridFacesRef.dot.visible = true;
+                }
+            } else {
+                if (gridHelperRef) gridHelperRef.visible = true;
+                if (gridGroundRef) {
+                    gridGroundRef.material.opacity = 0.15;
+                    gridGroundRef.material.color.setHex(0x1f2937);
+                }
             }
-            document.getElementById('grid-lines-toggle').classList.add('active');
-            document.getElementById('grid-faces-toggle').classList.add('active');
+            updateGridLineBtnState();
+            updateGridFaceBtnState();
         }
 
         function hideGridControlBar() {
@@ -3697,6 +3702,9 @@
             
             // 将指示器元素添加到组
             groundPlaneIndicator = new THREE.Group();
+            // 保存AR模式网格引用
+            arGridHelperRef = gridHelper;
+            arGridFacesRef = { ring, dot };
             groundPlaneIndicator.add(gridHelper);
             groundPlaneIndicator.add(ring);
             groundPlaneIndicator.add(dot);
@@ -3723,6 +3731,9 @@
                 });
                 groundPlaneIndicator = null;
             }
+            // 清理AR网格引用
+            arGridHelperRef = null;
+            arGridFacesRef = null;
         }
         
         // ==================== AR调试可视化 ====================
@@ -6272,86 +6283,10 @@
             document.getElementById('grid-lines-toggle').addEventListener('click', toggleGridLines);
             document.getElementById('grid-faces-toggle').addEventListener('click', toggleGridFaces);
 
-            // 键盘快捷键：G-网格线 F-网格面
-            document.addEventListener('keydown', (e) => {
-                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-                if (e.key === 'g' || e.key === 'G') {
-                    e.preventDefault();
-                    toggleGridLines();
-                } else if (e.key === 'f' || e.key === 'F') {
-                    e.preventDefault();
-                    toggleGridFaces();
-                }
-                
-                // 模型变换键盘快捷键（仅在GLB模式下有效）
-                if (!isGlbMode && !dropInViewer) return;
-                const step = e.shiftKey ? 0.5 : 0.1;
-                const rotStep = e.shiftKey ? 15 : 5;
-                const sclStep = e.shiftKey ? 0.5 : 0.1;
-                switch (e.key) {
-                    case 'ArrowLeft':
-                        e.preventDefault();
-                        changePosition('x', -step);
-                        break;
-                    case 'ArrowRight':
-                        e.preventDefault();
-                        changePosition('x', step);
-                        break;
-                    case 'ArrowUp':
-                        e.preventDefault();
-                        changePosition('z', -step);
-                        break;
-                    case 'ArrowDown':
-                        e.preventDefault();
-                        changePosition('z', step);
-                        break;
-                    case 'PageUp':
-                        e.preventDefault();
-                        changePosition('y', step);
-                        break;
-                    case 'PageDown':
-                        e.preventDefault();
-                        changePosition('y', -step);
-                        break;
-                    case 'q':
-                    case 'Q':
-                        e.preventDefault();
-                        changeRotation('y', -rotStep);
-                        break;
-                    case 'e':
-                    case 'E':
-                        e.preventDefault();
-                        changeRotation('y', rotStep);
-                        break;
-                    case '[':
-                        e.preventDefault();
-                        changeScale(-sclStep);
-                        break;
-                    case ']':
-                        e.preventDefault();
-                        changeScale(sclStep);
-                        break;
-                    case 'r':
-                    case 'R':
-                        e.preventDefault();
-                        resetTransform();
-                        break;
-                }
-            });
-
             // 单位校准比例控制
             document.getElementById('cal-scale-bigger').addEventListener('click', () => changeCalibrationScale(0.05));
             document.getElementById('cal-scale-smaller').addEventListener('click', () => changeCalibrationScale(-0.05));
 
-            // 键盘快捷键: D 键切换AR调试模式
-            window.addEventListener('keydown', (e) => {
-                if (e.key === 'd' || e.key === 'D') {
-                    if (isARActive) {
-                        toggleArDebugMode();
-                    }
-                }
-            });
-            
             // Debug HUD 按钮事件
             document.getElementById('hud-copy-report').addEventListener('click', copyDebugReport);
             document.getElementById('hud-close').addEventListener('click', () => {
