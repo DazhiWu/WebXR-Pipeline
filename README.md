@@ -177,6 +177,34 @@ GLB 模型加载模块支持标准 GLB（GLTF Binary）格式文件的完整加�
 - AR 模式下需先检测到地面才能放置模型
 - 切换模型时会自动清理前一个模型的所有资源
 
+## PLY 移动端优化示例
+
+`models/test_model.ply` 原始文件包含 4,910,038 个 Gaussian、大小约 79.9 MB。项目保留原文件作为高清源，并生成了移动端版本：
+
+| 文件 | Gaussian 数量 | 文件大小 | 用途 |
+|------|---------------:|---------:|------|
+| `models/test_model.ply` | 4,910,038 | 79.9 MB | 原始高清源，不直接提供给手机加载 |
+| `models/test_model.mobile.compressed.ply` | 500,000 | 约 7.8 MB | 手机 AR 推荐加载 |
+
+移动端版本使用自适应误差降点，并按 Morton 空间顺序重新排列后输出为 packed PLY。可通过以下命令复现：
+
+```bash
+npx --yes @playcanvas/splat-transform@3.3.3 -w \
+  models/test_model.ply \
+  --filter-nan \
+  --decimate-adaptive 500000 \
+  /tmp/test_model.mobile.ply \
+  --memory --no-tty
+
+npx --yes @playcanvas/splat-transform@3.3.3 -w \
+  /tmp/test_model.mobile.ply \
+  --morton-order \
+  models/test_model.mobile.compressed.ply \
+  --memory --no-tty
+```
+
+加载器对 PLY 启用了渐进显示、整数排序、半精度协方差纹理和中间数据释放。移动设备还会限制像素比和 XR framebuffer scale。新的大模型应先制作类似的移动端 LOD，不要只依赖运行时压缩。
+
 ## 部署步骤
 
 ### 1. 准备 HTTPS 服务器

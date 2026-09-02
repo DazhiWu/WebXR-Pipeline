@@ -2,6 +2,7 @@ node_modules/
 models/living-room.ply
 models/living-room.compressed.ply
 models/Merged.glb
+models/test_model.ply
 dist/
 dist.zip
 anotherProject/

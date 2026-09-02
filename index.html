@@ -1718,6 +1718,10 @@
     <div id="model-select-overlay" class="hidden">
         <div id="model-select-title">选择模型</div>
         <div id="model-list">
+            <div class="model-item" data-model="models/test_model.mobile.compressed.ply">
+                <div class="model-icon">📱</div>
+                <div class="model-name">test_model（移动端优化 · 50万点）</div>
+            </div>
             <div class="model-item" data-model="https://models.wuzhizhii.com/splat.ply">
                 <div class="model-icon">🎲</div>
                 <div class="model-name">splat.ply</div>
@@ -1752,6 +1756,10 @@
             <div class="model-column">
                 <div class="model-column-title">模型A</div>
                 <div id="model-list-a" class="model-list">
+                    <div class="model-item" data-model="models/test_model.mobile.compressed.ply">
+                        <div class="model-icon">📱</div>
+                        <div class="model-name">test_model（移动端优化 · 50万点）</div>
+                    </div>
                     <div class="model-item" data-model="https://models.wuzhizhii.com/splat.ply">
                         <div class="model-icon">🎲</div>
                         <div class="model-name">splat.ply</div>
@@ -1778,6 +1786,10 @@
             <div class="model-column">
                 <div class="model-column-title">模型B</div>
                 <div id="model-list-b" class="model-list">
+                    <div class="model-item" data-model="models/test_model.mobile.compressed.ply">
+                        <div class="model-icon">📱</div>
+                        <div class="model-name">test_model（移动端优化 · 50万点）</div>
+                    </div>
                     <div class="model-item" data-model="https://models.wuzhizhii.com/splat.ply">
                         <div class="model-icon">🎲</div>
                         <div class="model-name">splat.ply</div>
@@ -1962,8 +1974,15 @@
         let watchPositionId = null;
         let dropInViewer = null;
         let splatLoaded = false;
+        let currentPlyLoadPromise = null;
+        let plyLoadGeneration = 0;
         let controls = null;
         let isDesktopMode = false;
+
+        function isMobileDevice() {
+            return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+                (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+        }
         
         // PLY模型加载相关变量
         let currentModule = null;  // 当前选择的模块: 'ply' 或 'pipeline'
@@ -2815,9 +2834,12 @@
                 antialias: true,
                 alpha: true
             });
-            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobileDevice() ? 1.5 : 2));
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
+            if (renderer.xr.setFramebufferScaleFactor) {
+                renderer.xr.setFramebufferScaleFactor(isMobileDevice() ? 0.8 : 1);
+            }
             document.getElementById('canvas-container').appendChild(renderer.domElement);
             
             // 添加环境光
@@ -3026,6 +3048,11 @@
         }
 
         function onSessionEnd() {
+            plyLoadGeneration++;
+            if (currentPlyLoadPromise && typeof currentPlyLoadPromise.abort === 'function') {
+                currentPlyLoadPromise.abort('AR会话已结束');
+                currentPlyLoadPromise = null;
+            }
             xrSession = null;
             isARActive = false;
             arButton.style.display = 'block';
@@ -3182,7 +3209,11 @@
                 
                 // 如果已选择模型，加载模型到锚点位置
                 if (selectedModelPath) {
-                    await loadPlyModel(selectedModelPath, arAnchor);
+                    const loadedViewer = await loadPlyModel(selectedModelPath, arAnchor);
+                    if (!loadedViewer) {
+                        instructions.textContent = '模型加载失败，请重试或选择较小模型';
+                        return;
+                    }
                     
                     // 根据经纬度调整模型位置
                     if (currentLocation && dropInViewer) {
@@ -4701,67 +4732,114 @@
         // ==================== PLY模型加载功能 ====================
         async function loadPlyModel(modelPath, parentGroup) {
             console.log('开始加载模型:', modelPath);
-            
+
+            const loadGeneration = ++plyLoadGeneration;
+            if (currentPlyLoadPromise && typeof currentPlyLoadPromise.abort === 'function') {
+                currentPlyLoadPromise.abort('开始加载新模型');
+                currentPlyLoadPromise = null;
+            }
+
             if (dropInViewer) {
                 console.log('移除旧模型');
-                // 移除旧模型
+                const viewerToDispose = dropInViewer;
                 if (arAnchor) {
-                    arAnchor.remove(dropInViewer);
+                    arAnchor.remove(viewerToDispose);
                 } else {
-                    scene.remove(dropInViewer);
+                    scene.remove(viewerToDispose);
                 }
-                dropInViewer.dispose();
                 dropInViewer = null;
+                await viewerToDispose.dispose().catch((error) => {
+                    console.warn('旧PLY模型释放过程中止:', error);
+                });
                 modelBasePosition = { x: 0, y: 0, z: 0 };
             }
-            
+
             try {
                 const GaussianSplats3D = window['Gaussian Splats 3D'];
                 if (typeof GaussianSplats3D === 'undefined') {
                     console.warn('高斯泼溅库未加载');
                     showTemporaryMessage('高斯泼溅库加载失败');
-                    return;
+                    return null;
                 }
-                
+
+                showGlbLoading('正在下载PLY模型 0%');
+                updateGlbProgress(0);
+
                 console.log('创建DropInViewer');
                 dropInViewer = new GaussianSplats3D.DropInViewer({
                     gpuAcceleratedSort: false,
-                    integerBasedSort: false,
-                    selfDrivenMode: true,
-                    renderer: renderer,
-                    camera: camera,
-                    sharedMemoryForWorkers: false
+                    integerBasedSort: true,
+                    sharedMemoryForWorkers: false,
+                    halfPrecisionCovariancesOnGPU: true,
+                    freeIntermediateSplatData: true,
+                    ignoreDevicePixelRatio: isMobileDevice(),
+                    inMemoryCompressionLevel: 2,
+                    sphericalHarmonicsDegree: 0,
+                    sceneRevealMode: GaussianSplats3D.SceneRevealMode.Instant
                 });
-                
+
                 console.log('将DropInViewer添加到场景');
                 parentGroup.add(dropInViewer);
-                
+
                 console.log('开始加载splat场景:', modelPath);
-                const loadPromise = dropInViewer.addSplatScene(modelPath, {
+                currentPlyLoadPromise = dropInViewer.addSplatScene(modelPath, {
                     position: [0, -1, 0],
                     scale: [1, 1, 1],
                     showLoadingUI: false,
-                    splatAlphaRemovalThreshold: 5
+                    progressiveLoad: true,
+                    splatAlphaRemovalThreshold: 5,
+                    onProgress: (percent, percentLabel, loaderStatus) => {
+                        if (loadGeneration !== plyLoadGeneration) return;
+                        const safePercent = Math.min(100, Math.max(0, Number(percent) || 0));
+                        const phase = loaderStatus === 1 ? '正在处理PLY模型' : '正在下载PLY模型';
+                        const progressText = `${phase} ${percentLabel || Math.round(safePercent) + '%'}`;
+                        updateGlbProgress(safePercent);
+
+                        const loadingText = document.getElementById('glb-loading-text');
+                        if (loadingText) loadingText.textContent = progressText;
+                        if (isARActive && instructions && safePercent < 100) {
+                            instructions.textContent = `模型已开始显示，后台加载 ${Math.round(safePercent)}%`;
+                        } else if (isARActive && instructions && safePercent >= 100) {
+                            instructions.textContent = '点击模型添加测量点';
+                        }
+                        if (safePercent >= 100 && loadGeneration === plyLoadGeneration) {
+                            currentPlyLoadPromise = null;
+                        }
+                    }
                 });
-                
-                await loadPromise;
-                console.log('splat场景加载完成');
-                
+
+                await currentPlyLoadPromise;
+                if (loadGeneration !== plyLoadGeneration || !dropInViewer) return null;
+                console.log('splat场景首批数据加载完成');
+
                 // 加载完成后调整模型方向（修复倒立问题）
                 dropInViewer.rotation.x = -Math.PI;
-                
+
                 splatLoaded = true;
                 selectedModelPath = modelPath;
-                console.log('模型加载成功:', modelPath);
-                showTemporaryMessage('模型加载成功');
-                
+                console.log('模型已开始渐进显示:', modelPath);
+                showTemporaryMessage('模型已开始显示，剩余数据继续加载');
+                hideGlbLoading();
+
                 if (isPlyMode && displayMode === 'single') {
                     resetTransform();
                     showTransformPanel();
                 }
+                return dropInViewer;
             } catch (error) {
+                if (loadGeneration !== plyLoadGeneration) return null;
+                currentPlyLoadPromise = null;
                 console.error('加载模型失败:', error);
                 showTemporaryMessage('模型加载失败: ' + error.message);
+                hideGlbLoading();
+                if (dropInViewer) {
+                    parentGroup.remove(dropInViewer);
+                    const failedViewer = dropInViewer;
+                    dropInViewer = null;
+                    await failedViewer.dispose().catch(() => {});
+                }
+                splatLoaded = false;
+                return null;
             }
         }
 
@@ -4800,7 +4878,8 @@
             modelSelectOverlay.classList.add('hidden');
             
             if (isPlyEditorMode) {
-                await loadPlyModel(selectedModelPath, scene);
+                const loadedViewer = await loadPlyModel(selectedModelPath, scene);
+                if (!loadedViewer) return;
                 
                 if (controls) {
                     camera.position.set(8, 6, 8);
@@ -4820,7 +4899,8 @@
                 }
                 
                 console.log('准备加载模型，parentGroup:', parentGroup);
-                await loadPlyModel(selectedModelPath, parentGroup);
+                const loadedViewer = await loadPlyModel(selectedModelPath, parentGroup);
+                if (!loadedViewer) return;
                 
                 // 根据经纬度调整模型位置（模型切换时）
                 if (arAnchor && currentLocation && dropInViewer) {
@@ -5042,11 +5122,13 @@
                 // 加载模型A
                 const viewerA = new GaussianSplats3D.DropInViewer({
                     gpuAcceleratedSort: false,
-                    integerBasedSort: false,
-                    selfDrivenMode: true,
-                    renderer: renderer,
-                    camera: camera,
-                    sharedMemoryForWorkers: false
+                    integerBasedSort: true,
+                    sharedMemoryForWorkers: false,
+                    halfPrecisionCovariancesOnGPU: true,
+                    freeIntermediateSplatData: true,
+                    ignoreDevicePixelRatio: isMobileDevice(),
+                    inMemoryCompressionLevel: 2,
+                    sphericalHarmonicsDegree: 0
                 });
                 dropInViewerA.add(viewerA);
                 parentGroup.add(dropInViewerA);
@@ -5062,11 +5144,13 @@
                 // 加载模型B
                 const viewerB = new GaussianSplats3D.DropInViewer({
                     gpuAcceleratedSort: false,
-                    integerBasedSort: false,
-                    selfDrivenMode: true,
-                    renderer: renderer,
-                    camera: camera,
-                    sharedMemoryForWorkers: false
+                    integerBasedSort: true,
+                    sharedMemoryForWorkers: false,
+                    halfPrecisionCovariancesOnGPU: true,
+                    freeIntermediateSplatData: true,
+                    ignoreDevicePixelRatio: isMobileDevice(),
+                    inMemoryCompressionLevel: 2,
+                    sphericalHarmonicsDegree: 0
                 });
                 dropInViewerB.add(viewerB);
                 parentGroup.add(dropInViewerB);
@@ -5556,9 +5640,12 @@
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 1000);
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobileDevice() ? 1.5 : 2));
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
+            if (renderer.xr.setFramebufferScaleFactor) {
+                renderer.xr.setFramebufferScaleFactor(isMobileDevice() ? 0.8 : 1);
+            }
             document.getElementById('canvas-container').appendChild(renderer.domElement);
             
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);

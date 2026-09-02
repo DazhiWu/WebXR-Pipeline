@@ -37,8 +37,8 @@ export default defineConfig({
         })
         this.emitFile({
           type: 'asset',
-          fileName: 'models/living-room.ply',
-          source: require('fs').readFileSync(resolve(__dirname, 'models/living-room.ply'))
+          fileName: 'models/test_model.mobile.compressed.ply',
+          source: require('fs').readFileSync(resolve(__dirname, 'models/test_model.mobile.compressed.ply'))
         })
         this.emitFile({
           type: 'asset',
