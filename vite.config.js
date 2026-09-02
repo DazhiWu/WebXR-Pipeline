@@ -37,6 +37,11 @@ export default defineConfig({
         })
         this.emitFile({
           type: 'asset',
+          fileName: 'models/flowerpat.ply',
+          source: require('fs').readFileSync(resolve(__dirname, 'models/flowerpat.ply'))
+        })
+        this.emitFile({
+          type: 'asset',
           fileName: 'models/test_model.mobile.compressed.ply',
           source: require('fs').readFileSync(resolve(__dirname, 'models/test_model.mobile.compressed.ply'))
         })

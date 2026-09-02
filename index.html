@@ -1722,25 +1722,17 @@
                 <div class="model-icon">📱</div>
                 <div class="model-name">test_model（移动端优化 · 50万点）</div>
             </div>
-            <div class="model-item" data-model="https://models.wuzhizhii.com/splat.ply">
+            <div class="model-item" data-model="models/splat.ply">
                 <div class="model-icon">🎲</div>
                 <div class="model-name">splat.ply</div>
             </div>
-            <div class="model-item" data-model="https://models.wuzhizhii.com/splat2.ply">
+            <div class="model-item" data-model="models/splat2.ply">
                 <div class="model-icon">🎯</div>
                 <div class="model-name">splat2.ply</div>
             </div>
-            <div class="model-item" data-model="https://models.wuzhizhii.com/living-room.compressed.ply">
-                <div class="model-icon">🏠</div>
-                <div class="model-name">living-room.ply</div>
-            </div>
-            <div class="model-item" data-model="https://models.wuzhizhii.com/flowerpat.ply">
+            <div class="model-item" data-model="models/flowerpat.ply">
                 <div class="model-icon">🌸</div>
                 <div class="model-name">flowerpat.ply</div>
-            </div>
-            <div class="model-item" data-model="https://models.wuzhizhii.com/3-5_mswipmr3_w2s16t.compressed.ply">
-                <div class="model-icon">🌸</div>
-                <div class="model-name">3-5_mswipmr3_w2s16t.ply</div>
             </div>
         </div>
         <button id="model-select-btn">加载模型</button>
@@ -1760,25 +1752,17 @@
                         <div class="model-icon">📱</div>
                         <div class="model-name">test_model（移动端优化 · 50万点）</div>
                     </div>
-                    <div class="model-item" data-model="https://models.wuzhizhii.com/splat.ply">
+                    <div class="model-item" data-model="models/splat.ply">
                         <div class="model-icon">🎲</div>
                         <div class="model-name">splat.ply</div>
                     </div>
-                    <div class="model-item" data-model="https://models.wuzhizhii.com/splat2.ply">
+                    <div class="model-item" data-model="models/splat2.ply">
                         <div class="model-icon">🎯</div>
                         <div class="model-name">splat2.ply</div>
                     </div>
-                    <div class="model-item" data-model="https://models.wuzhizhii.com/living-room.compressed.ply">
-                        <div class="model-icon">🏠</div>
-                        <div class="model-name">living-room.ply</div>
-                    </div>
-                    <div class="model-item" data-model="https://models.wuzhizhii.com/flowerpat.ply">
+                    <div class="model-item" data-model="models/flowerpat.ply">
                         <div class="model-icon">🌸</div>
                         <div class="model-name">flowerpat.ply</div>
-                    </div>
-                    <div class="model-item" data-model="https://models.wuzhizhii.com/3-5_mswipmr3_w2s16t.compressed.ply">
-                        <div class="model-icon">🌸</div>
-                        <div class="model-name">3-5_mswipmr3_w2s16t.ply</div>
                     </div>
                 </div>
             </div>
@@ -1790,25 +1774,17 @@
                         <div class="model-icon">📱</div>
                         <div class="model-name">test_model（移动端优化 · 50万点）</div>
                     </div>
-                    <div class="model-item" data-model="https://models.wuzhizhii.com/splat.ply">
+                    <div class="model-item" data-model="models/splat.ply">
                         <div class="model-icon">🎲</div>
                         <div class="model-name">splat.ply</div>
                     </div>
-                    <div class="model-item" data-model="https://models.wuzhizhii.com/splat2.ply">
+                    <div class="model-item" data-model="models/splat2.ply">
                         <div class="model-icon">🎯</div>
                         <div class="model-name">splat2.ply</div>
                     </div>
-                    <div class="model-item" data-model="https://models.wuzhizhii.com/living-room.compressed.ply">
-                        <div class="model-icon">🏠</div>
-                        <div class="model-name">living-room.ply</div>
-                    </div>
-                    <div class="model-item" data-model="https://models.wuzhizhii.com/flowerpat.ply">
+                    <div class="model-item" data-model="models/flowerpat.ply">
                         <div class="model-icon">🌸</div>
                         <div class="model-name">flowerpat.ply</div>
-                    </div>
-                    <div class="model-item" data-model="https://models.wuzhizhii.com/3-5_mswipmr3_w2s16t.compressed.ply">
-                        <div class="model-icon">🌸</div>
-                        <div class="model-name">3-5_mswipmr3_w2s16t.ply</div>
                     </div>
                 </div>
             </div>
@@ -2042,43 +2018,8 @@
             scaleStep: 0.1
         };
 
-        // 默认模型经纬度（API获取失败时使用）
-        const DEFAULT_MODEL_LAT = 27.9672;
-        const DEFAULT_MODEL_LNG = 120.668;
-
-        // 模型基础位置（根据经纬度计算）
+        // 模型基础位置（相对于 AR 命中平面）
         let modelBasePosition = { x: 0, y: 0, z: 0 };
-
-        // 获取模型经纬度（通过API接口）
-        async function getModelLatLng(modelPath) {
-            try {
-                const response = await fetch(`/api/model/metadata?path=${encodeURIComponent(modelPath)}`);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                
-                if (data && typeof data.latitude === 'number' && typeof data.longitude === 'number') {
-                    console.log('从API获取模型经纬度:', data.latitude, data.longitude);
-                    return {
-                        lat: data.latitude,
-                        lng: data.longitude
-                    };
-                }
-                
-                throw new Error('API返回数据格式不正确');
-            } catch (error) {
-                console.warn('API获取模型经纬度失败，使用默认值:', error.message);
-                
-                console.log('使用默认经纬度:', DEFAULT_MODEL_LAT, DEFAULT_MODEL_LNG);
-                return {
-                    lat: DEFAULT_MODEL_LAT,
-                    lng: DEFAULT_MODEL_LNG
-                };
-            }
-        }
 
         let measurePointMarkers = [];  // 测量点标记对象
         let measureGroup = null;  // 测量元素组
@@ -3215,22 +3156,10 @@
                         return;
                     }
                     
-                    // 根据经纬度调整模型位置
-                    if (currentLocation && dropInViewer) {
-                        const modelLatLng = await getModelLatLng(selectedModelPath);
-                        const offset = geoToWorld(
-                            modelLatLng.lat,
-                            modelLatLng.lng,
-                            currentLocation.lat,
-                            currentLocation.lng
-                        );
-                        
-                        modelBasePosition = { x: offset.x, y: 0, z: offset.z };
-                        applyModelTransform();
-                        
-                        console.log('模型位置调整完成:', offset.x, offset.z);
-                        showTemporaryMessage(`模型已定位到: ${modelLatLng.lat.toFixed(4)}°, ${modelLatLng.lng.toFixed(4)}°`);
-                    }
+                    // PLY 是锚点本地坐标模型。将它留在命中平面处，避免元数据接口
+                    // 不可用时的默认经纬度把模型移动到相机视野之外。
+                    modelBasePosition = { x: 0, y: 0, z: 0 };
+                    applyModelTransform();
                     
                     instructions.textContent = '点击模型添加测量点';
                     reticle.visible = false;
@@ -4902,20 +4831,11 @@
                 const loadedViewer = await loadPlyModel(selectedModelPath, parentGroup);
                 if (!loadedViewer) return;
                 
-                // 根据经纬度调整模型位置（模型切换时）
-                if (arAnchor && currentLocation && dropInViewer) {
-                    const modelLatLng = await getModelLatLng(selectedModelPath);
-                    const offset = geoToWorld(
-                        modelLatLng.lat,
-                        modelLatLng.lng,
-                        currentLocation.lat,
-                        currentLocation.lng
-                    );
-                    
-                    modelBasePosition = { x: offset.x, y: 0, z: offset.z };
+                // 在 AR 中切换 PLY 时也保持在当前命中平面，不能复用管线的 GPS
+                // 坐标偏移逻辑，否则后端元数据缺失会把模型放到视野以外。
+                if (arAnchor && dropInViewer) {
+                    modelBasePosition = { x: 0, y: 0, z: 0 };
                     applyModelTransform();
-                    
-                    showTemporaryMessage(`模型已定位到: ${modelLatLng.lat.toFixed(4)}°, ${modelLatLng.lng.toFixed(4)}°`);
                 }
                 
                 if (isDesktopMode && controls) {

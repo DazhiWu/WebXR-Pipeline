@@ -6,3 +6,8 @@ models/test_model.ply
 dist/
 dist.zip
 anotherProject/
+.playwright-mcp
+ply-local-splat-desktop.png
+test_result.txt
+test-model-desktop-optimized.png
+test-model-mobile-layout.png
