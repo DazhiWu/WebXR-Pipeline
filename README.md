@@ -5,7 +5,7 @@
 ## 功能特性
 
 - ✅ **多端兼容**：支持 Android/iOS 现代浏览器、微信浏览器、Chrome、Edge、Safari
-- ✅ **GPS 定位**：实时获取设备经纬度，自动更新定位信息
+- ✅ **RTK 优先定位**：优先采用 RTK 固定解；不可用、精度不足或超时时自动回退手机定位
 - ✅ **3D 管线可视化**：预设多组地下管网数据，自动经纬度转 3D 坐标
 - ✅ **WebXR AR 模式**：真实地面检测与对齐，贴地不悬浮不穿地
 - ✅ **半透明透视效果**：管线默认地下半透明显示
@@ -58,12 +58,15 @@ npm run dev
 ```
 WebXR2/
 ├── index.html              # 主应用文件（包含所有 HTML/CSS/JS）
+├── rtk-config.js           # 现场 RTK 网关或接收机适配配置
 ├── package.json            # 项目配置
 ├── vite.config.js          # Vite 构建配置
 ├── README.md               # 项目文档
 ├── tests/
 │   ├── glb-loader.test.js      # GLB 模型加载器单元测试
-│   └── glb-integration.test.js # GLB 模型加载集成测试
+│   ├── glb-integration.test.js # GLB 模型加载集成测试
+│   ├── rtk-location.test.js    # RTK 优先与回退回归检查
+│   └── ar-stable-placement.test.js # 稳定地面与 XRAnchor 回归检查
 ├── models/
 │   ├── oblique.glb             # GLB 倾斜摄影模型
 │   ├── Merged_modified.glb              # GLB 合并模型
@@ -78,18 +81,35 @@ WebXR2/
 
 ## 代码逻辑说明
 
-### 1. GPS 定位模块 (`initGPS`, `handleLocationSuccess`)
+### 1. RTK 优先定位模块 (`initGPS`, `requestPreferredLocation`)
 
-- 使用 `navigator.geolocation` API 获取实时位置
-- `getCurrentPosition` 获取初始位置
-- `watchPosition` 持续监听位置更新
-- 定位成功后自动生成以当前位置为原点的管网数据
+- 优先取得 RTK 固定解，验证解状态与水平精度
+- RTK 未配置、超时、CORS 失败、非固定解或精度不足时自动使用 `navigator.geolocation`
+- 定位成功后自动生成以初始定位为原点的管网数据；后续状态更新不改变当前会话的校准原点
 
 ### 2. 坐标转换模块 (`geoToWorld`)
 
 - 简化的平面投影算法（适合小范围区域）
 - 将经纬度坐标转换为 Three.js 世界坐标（米制）
 - 公式基于地球半径和当前位置的纬度计算
+
+### RTK 定位接入
+
+部署包包含 `rtk-config.js`，默认不请求任何 RTK 服务，因此会自动使用手机定位。现场接入时仅需配置 `endpoint`，网关应在服务端完成接收机认证，并允许网页来源的 CORS 请求；不要把 NTRIP 密码或服务端密钥写入这个浏览器可见文件。
+
+网关响应必须包含经纬度、水平精度和解状态。例如：
+
+```json
+{
+  "latitude": 27.967431,
+  "longitude": 120.667297,
+  "horizontalAccuracy": 0.02,
+  "fixQuality": "fixed",
+  "altitude": 12.34
+}
+```
+
+默认只接受固定解（`fixed`、`RTK_FIXED` 或 NMEA 质量码 `4`）且水平精度不大于 0.1 m；其余响应、网络/CORS 错误或 5 秒超时都会回退手机定位。页面状态栏会显示当前来源和精度。已接入 Web Bluetooth 或原生壳的接收机时，也可在该文件提供异步 `window.getRtkPosition()`，替代 HTTP 网关。
 
 ### 3. Three.js 初始化模块 (`initThreeJS`)
 

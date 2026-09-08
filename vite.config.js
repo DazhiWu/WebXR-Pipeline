@@ -50,6 +50,11 @@ export default defineConfig({
           fileName: 'highway.geojsonl.json',
           source: require('fs').readFileSync(resolve(__dirname, 'highway.geojsonl.json'))
         })
+        this.emitFile({
+          type: 'asset',
+          fileName: 'rtk-config.js',
+          source: require('fs').readFileSync(resolve(__dirname, 'rtk-config.js'))
+        })
       }
     }
   ]

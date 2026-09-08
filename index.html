@@ -19,6 +19,11 @@
         }
     }
     </script>
+    <!--
+      部署时可单独修改 rtk-config.js 以接入现场 RTK 网关。
+      文件中不能放置 NTRIP 密码、服务端密钥等敏感信息；应由网关代为鉴权。
+    -->
+    <script src="rtk-config.js"></script>
     
     <style>
         * {
@@ -1943,6 +1948,9 @@
         let hitTestSourceRequested = false;
         let reticle = null;
         let arAnchor = null;
+        let xrAnchor = null;
+        let isCreatingArAnchor = false;
+        let stableHitSamples = [];
         let pipelines = [];
         let raycaster = new THREE.Raycaster();
         let pointer = new THREE.Vector2();
@@ -1954,6 +1962,12 @@
         let plyLoadGeneration = 0;
         let controls = null;
         let isDesktopMode = false;
+        const GROUND_MAX_TILT_RADIANS = THREE.MathUtils.degToRad(15);
+        const STABLE_HIT_WINDOW_MS = 750;
+        const STABLE_HIT_MIN_DURATION_MS = 450;
+        const STABLE_HIT_MIN_SAMPLES = 12;
+        const STABLE_HIT_MAX_POSITION_DELTA_METERS = 0.08;
+        const STABLE_HIT_MAX_NORMAL_DELTA_RADIANS = THREE.MathUtils.degToRad(4);
 
         function isMobileDevice() {
             return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
@@ -2276,10 +2290,160 @@
         const modelSelectBtn = document.getElementById('model-select-btn');
         const modelSwitchBtn = document.getElementById('model-switch-btn');
 
-        // ==================== GPS定位模块 ====================
+        // ==================== RTK优先定位模块 ====================
         let locationAttempts = 0;
         const maxLocationAttempts = 3;
         const MIN_ACCEPTABLE_ACCURACY = 20; // 最小可接受精度（米）
+        const DEFAULT_RTK_CONFIG = Object.freeze({
+            endpoint: '',
+            timeoutMs: 5000,
+            pollIntervalMs: 5000,
+            maxAccuracyMeters: 0.1,
+            requireFixedSolution: true,
+            headers: {}
+        });
+        let locationSource = null;
+        let hasLocationOrigin = false;
+        let rtkPollTimer = null;
+        let rtkPollGeneration = 0;
+
+        function getRtkConfig() {
+            return { ...DEFAULT_RTK_CONFIG, ...(window.RTK_CONFIG || {}) };
+        }
+
+        function stopRtkPolling() {
+            rtkPollGeneration++;
+            if (rtkPollTimer) {
+                window.clearTimeout(rtkPollTimer);
+                rtkPollTimer = null;
+            }
+        }
+
+        function getLocationSourceLabel(source = locationSource) {
+            return source === 'rtk' ? 'RTK固定解' : '手机定位';
+        }
+
+        function formatAccuracy(accuracy) {
+            return accuracy < 1 ? `${accuracy.toFixed(2)}m` : `${Math.round(accuracy)}m`;
+        }
+
+        function updateLocationStatus() {
+            const accuracyLevel = getAccuracyLevel(currentAccuracy);
+            const isRtk = locationSource === 'rtk';
+            locationStatus.textContent = isRtk ? 'RTK定位成功 ✓' :
+                accuracyLevel === 'excellent' || accuracyLevel === 'good' ? '手机定位成功 ✓' :
+                accuracyLevel === 'moderate' ? '手机定位可用 (精度一般)' :
+                `手机定位精度较差 (${formatAccuracy(currentAccuracy)})，建议到室外`;
+            locationStatus.style.color = isRtk || accuracyLevel === 'excellent' || accuracyLevel === 'good' ? '#4ade80' :
+                accuracyLevel === 'moderate' ? '#fbbf24' : '#ef4444';
+        }
+
+        function normalizeRtkFix(payload) {
+            const config = getRtkConfig();
+            const raw = payload && (payload.position || payload.data || payload);
+            const lat = Number(raw?.latitude ?? raw?.lat);
+            const lng = Number(raw?.longitude ?? raw?.lng ?? raw?.lon);
+            const accuracy = Number(raw?.horizontalAccuracy ?? raw?.accuracy ?? raw?.hAcc);
+            const quality = String(raw?.fixQuality ?? raw?.fixType ?? raw?.solution ?? raw?.status ?? '').trim().toLowerCase();
+            const isFixed = ['fixed', 'rtk_fixed', 'rtk-fixed', 'rtk fix', '4'].includes(quality);
+
+            if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(accuracy)) {
+                throw new Error('RTK响应缺少 latitude、longitude 或 horizontalAccuracy');
+            }
+            if (config.requireFixedSolution && !isFixed) {
+                throw new Error(`RTK解不是固定解 (${quality || 'unknown'})`);
+            }
+            if (accuracy < 0 || accuracy > config.maxAccuracyMeters) {
+                throw new Error(`RTK水平精度 ${formatAccuracy(accuracy)} 未达到 ${formatAccuracy(config.maxAccuracyMeters)}`);
+            }
+
+            return {
+                lat,
+                lng,
+                accuracy,
+                altitude: Number(raw?.altitude ?? raw?.alt),
+                quality
+            };
+        }
+
+        async function requestRtkFix() {
+            const config = getRtkConfig();
+            let payload;
+            if (typeof window.getRtkPosition === 'function') {
+                payload = await window.getRtkPosition();
+            } else if (config.endpoint) {
+                const controller = new AbortController();
+                const timeout = window.setTimeout(() => controller.abort(), config.timeoutMs);
+                try {
+                    const response = await fetch(config.endpoint, {
+                        headers: config.headers || {},
+                        signal: controller.signal,
+                        cache: 'no-store'
+                    });
+                    if (!response.ok) throw new Error(`RTK服务返回 HTTP ${response.status}`);
+                    payload = await response.json();
+                } finally {
+                    window.clearTimeout(timeout);
+                }
+            } else {
+                throw new Error('RTK未配置');
+            }
+            return normalizeRtkFix(payload);
+        }
+
+        function applyLocationFix(fix, source, { regenerate = false } = {}) {
+            currentLocation = { lat: fix.lat, lng: fix.lng };
+            currentAccuracy = fix.accuracy;
+            locationSource = source;
+
+            updateLocationDisplay(currentLocation);
+            updateAccuracyDisplay(currentAccuracy);
+            updateLocationStatus();
+            overlay.classList.add('hidden');
+            arButton.disabled = false;
+            recenterBtn.disabled = false;
+
+            if (regenerate) generatePipelineData();
+        }
+
+        function scheduleRtkPoll() {
+            const config = getRtkConfig();
+            const generation = rtkPollGeneration;
+            if (!config.endpoint && typeof window.getRtkPosition !== 'function') return;
+            rtkPollTimer = window.setTimeout(async () => {
+                if (generation !== rtkPollGeneration) return;
+                try {
+                    const fix = await requestRtkFix();
+                    if (generation !== rtkPollGeneration) return;
+                    // 追踪更新只刷新状态；当前会话中的管网坐标保持初始校准原点。
+                    applyLocationFix(fix, 'rtk');
+                    scheduleRtkPoll();
+                } catch (error) {
+                    if (generation !== rtkPollGeneration) return;
+                    console.warn('RTK更新不可用，切换至手机定位:', error.message);
+                    startPhoneLocation(`RTK更新失败：${error.message}`);
+                }
+            }, config.pollIntervalMs);
+        }
+
+        async function requestPreferredLocation() {
+            stopRtkPolling();
+            locationStatus.textContent = '正在获取RTK固定解...';
+            locationStatus.style.color = '#fbbf24';
+            try {
+                const fix = await requestRtkFix();
+                if (watchPositionId) {
+                    navigator.geolocation.clearWatch(watchPositionId);
+                    watchPositionId = null;
+                }
+                applyLocationFix(fix, 'rtk', { regenerate: !hasLocationOrigin });
+                hasLocationOrigin = true;
+                scheduleRtkPoll();
+            } catch (error) {
+                console.warn('RTK不可用，退回手机定位:', error.message);
+                startPhoneLocation(`RTK不可用：${error.message}`);
+            }
+        }
         
         function initGPS() {
             if (isDesktopMode) {
@@ -2287,17 +2451,22 @@
                 return;
             }
             
-            if (!navigator.geolocation) {
-                showOverlay('❌', '设备不支持定位', '请使用支持GPS定位的移动设备');
-                return;
-            }
-
             // 检查是否使用HTTPS（移动端必需）
             if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
                 showOverlay('⚠️', '建议使用HTTPS', '为确保定位功能正常工作，建议在HTTPS环境下访问');
             }
 
-            locationStatus.textContent = '正在获取高精度定位...';
+            requestPreferredLocation();
+        }
+
+        function startPhoneLocation(fallbackReason = '') {
+            stopRtkPolling();
+            if (!navigator.geolocation) {
+                showOverlay('❌', '设备不支持定位', fallbackReason || 'RTK不可用，且设备不支持手机定位');
+                return;
+            }
+            locationStatus.textContent = fallbackReason ? 'RTK不可用，正在获取手机定位...' : '正在获取手机定位...';
+            locationStatus.style.color = '#fbbf24';
             requestHighAccuracyLocation();
         }
 
@@ -2345,38 +2514,14 @@
         }
 
         function handleLocationSuccess(position) {
-            currentLocation = {
+            const fix = {
                 lat: position.coords.latitude,
-                lng: position.coords.longitude
+                lng: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                altitude: position.coords.altitude
             };
-            currentAccuracy = position.coords.accuracy;
-            
-            updateLocationDisplay(currentLocation);
-            updateAccuracyDisplay(currentAccuracy);
-            
-            const accuracyLevel = getAccuracyLevel(currentAccuracy);
-            
-            if (accuracyLevel === 'excellent' || accuracyLevel === 'good') {
-                locationStatus.textContent = '定位成功 ✓';
-                locationStatus.style.color = '#4ade80';
-                overlay.classList.add('hidden');
-                arButton.disabled = false;
-                recenterBtn.disabled = false;
-            } else if (accuracyLevel === 'moderate') {
-                locationStatus.textContent = '定位可用 (精度一般)';
-                locationStatus.style.color = '#fbbf24';
-                overlay.classList.add('hidden');
-                arButton.disabled = false;
-                recenterBtn.disabled = false;
-            } else {
-                locationStatus.textContent = `精度较差 (${Math.round(currentAccuracy)}m)，建议到室外`;
-                locationStatus.style.color = '#ef4444';
-                overlay.classList.add('hidden');
-                arButton.disabled = false;
-                recenterBtn.disabled = false;
-            }
-            
-            generatePipelineData();
+            applyLocationFix(fix, 'phone', { regenerate: !hasLocationOrigin });
+            hasLocationOrigin = true;
             
             if (watchPositionId) {
                 navigator.geolocation.clearWatch(watchPositionId);
@@ -2402,15 +2547,12 @@
             const newAccuracy = position.coords.accuracy;
             
             // 更新位置显示（即使精度没有更好也要显示最新位置）
-            currentLocation = { lat: newLat, lng: newLng };
-            currentAccuracy = newAccuracy;
-            updateLocationDisplay(currentLocation);
-            updateAccuracyDisplay(currentAccuracy);
+            applyLocationFix({ lat: newLat, lng: newLng, accuracy: newAccuracy }, 'phone');
             
             // 注意：已关闭自动重新渲染功能
             // 管线位置不会随GPS位置更新而自动变化
             
-            console.log('位置已更新:', newLat.toFixed(6), newLng.toFixed(6), '精度:', newAccuracy.toFixed(1) + 'm');
+            console.log('手机位置已更新:', newLat.toFixed(6), newLng.toFixed(6), '精度:', newAccuracy.toFixed(1) + 'm');
         }
 
         function handleLocationError(error) {
@@ -2434,7 +2576,7 @@
                     message = '定位失败，请重试';
             }
             showOverlay('⚠️', '定位失败', message);
-            locationStatus.textContent = '定位失败';
+            locationStatus.textContent = '手机定位失败';
             locationStatus.style.color = '#ef4444';
             recenterBtn.disabled = false;
         }
@@ -2445,7 +2587,7 @@
         }
 
         function updateAccuracyDisplay(accuracy) {
-            accuracyText.textContent = `精度: ${Math.round(accuracy)}m`;
+            accuracyText.textContent = `来源: ${getLocationSourceLabel()} | 精度: ${formatAccuracy(accuracy)}`;
             
             const dots = document.querySelectorAll('.accuracy-dot');
             const level = getAccuracyLevel(accuracy);
@@ -2489,13 +2631,15 @@
                 navigator.geolocation.clearWatch(watchPositionId);
                 watchPositionId = null;
             }
+            stopRtkPolling();
+            hasLocationOrigin = false;
             
             if (arAnchor) {
                 scene.remove(arAnchor);
                 arAnchor = null;
             }
             
-            requestHighAccuracyLocation();
+            requestPreferredLocation();
         }
 
         function showOverlay(icon, title, text) {
@@ -2691,9 +2835,7 @@
                 // 恢复原来的状态
                 if (currentLocation && currentAccuracy) {
                     const level = getAccuracyLevel(currentAccuracy);
-                    locationStatus.textContent = `定位成功`;
-                    locationStatus.style.color = level === 'excellent' || level === 'good' ? '#4ade80' : 
-                                                  level === 'moderate' ? '#fbbf24' : '#ef4444';
+                    updateLocationStatus();
                 } else {
                     locationStatus.textContent = original;
                     locationStatus.style.color = '';
@@ -2949,7 +3091,7 @@
             try {
                 const session = await navigator.xr.requestSession('immersive-ar', {
                     requiredFeatures: ['hit-test', 'local-floor'],
-                    optionalFeatures: ['dom-overlay'],
+                    optionalFeatures: ['dom-overlay', 'anchors'],
                     domOverlay: { root: document.body }
                 });
                 
@@ -3005,6 +3147,12 @@
             hitTestSourceRequested = false;
             hitTestSource = null;
             groundDetected = false;
+            stableHitSamples = [];
+            isCreatingArAnchor = false;
+            if (xrAnchor) {
+                xrAnchor.delete();
+                xrAnchor = null;
+            }
             if (reticle) reticle.visible = false;
             
             // 清理测量工具
@@ -3075,8 +3223,8 @@
                     });
                 }
                 
-                // 执行hit test - 只在锚点创建前执行
-                if (hitTestSource && !arAnchor) {
+                // 在稳定的水平命中面上放置，而不是把首帧任意命中结果当作地面。
+                if (hitTestSource && !arAnchor && !isCreatingArAnchor) {
                     const hitTestResults = frame.getHitTestResults(hitTestSource);
                     
                     if (hitTestResults.length > 0) {
@@ -3084,23 +3232,22 @@
                         const hitPose = hit.getPose(referenceSpace);
                         
                         if (hitPose) {
-                            reticle.visible = true;
-                            reticle.matrix.fromArray(hitPose.transform.matrix);
-                            reticle.matrix.decompose(reticle.position, reticle.quaternion, reticle.scale);
-                            
-                            // 当检测到地面且锚点未创建时，自动创建锚点并放置模型
-                            if (!arAnchor) {
-                                createARAnchor(hitPose.transform.matrix, referenceSpace);
+                            const isStableGround = updateStableGroundHit(hitPose, timestamp);
+                            if (isStableGround) {
+                                createARAnchor(hit, hitPose, referenceSpace, frame);
+                            } else if (reticle.visible) {
+                                instructions.textContent = '请保持手机稳定，正在确认水平地面';
                             }
                         }
                     } else {
                         reticle.visible = false;
+                        stableHitSamples = [];
                     }
                 }
                 
-                // 锚点创建后，确保锚点及其子元素的world matrix每帧正确更新
+                // 支持锚点的设备会返回会随 SLAM 重定位修正的原生姿态。
                 if (arAnchor) {
-                    // 确保锚点组的世界矩阵已更新，使子元素（模型、地面指示器）正确渲染
+                    updateNativeAnchorPose(frame, referenceSpace);
                     arAnchor.updateMatrixWorld(true);
                     // 停止hit test以节省性能（锚点已创建，不再需要）
                     if (hitTestSource) {
@@ -3125,19 +3272,100 @@
             }
         }
 
-        async function createARAnchor(matrix, referenceSpace) {
-            arAnchor = new THREE.Group();
-            // 从hit test矩阵中提取位置、旋转和缩放
-            const tempMatrix = new THREE.Matrix4().fromArray(matrix);
-            tempMatrix.decompose(arAnchor.position, arAnchor.quaternion, arAnchor.scale);
-            // 使用matrixAutoUpdate = true（默认值），让Three.js自动管理矩阵更新
-            // 这样当子元素添加到锚点后，matrixWorld能正确计算
-            arAnchor.matrixAutoUpdate = true;
-            arAnchor.matrixWorldNeedsUpdate = true;
-            scene.add(arAnchor);
+        function setObjectPoseFromXRPose(object, pose) {
+            object.matrix.fromArray(pose.transform.matrix);
+            object.matrix.decompose(object.position, object.quaternion, object.scale);
+        }
+
+        function updateStableGroundHit(hitPose, timestamp) {
+            const matrix = new THREE.Matrix4().fromArray(hitPose.transform.matrix);
+            const normal = new THREE.Vector3(0, 1, 0).transformDirection(matrix);
+            if (Math.abs(normal.y) < Math.cos(GROUND_MAX_TILT_RADIANS)) {
+                reticle.visible = false;
+                stableHitSamples = [];
+                instructions.textContent = '请将镜头对准水平地面';
+                return false;
+            }
+
+            setObjectPoseFromXRPose(reticle, hitPose);
+            // RingGeometry 默认法线朝本地 +Z；命中姿态的本地 +Y 才是地面法线。
+            reticle.rotateX(-Math.PI / 2);
+            reticle.visible = true;
+            stableHitSamples.push({
+                timestamp,
+                position: reticle.position.clone(),
+                normal
+            });
+            while (stableHitSamples.length && timestamp - stableHitSamples[0].timestamp > STABLE_HIT_WINDOW_MS) {
+                stableHitSamples.shift();
+            }
+            if (stableHitSamples.length < STABLE_HIT_MIN_SAMPLES ||
+                timestamp - stableHitSamples[0].timestamp < STABLE_HIT_MIN_DURATION_MS) {
+                return false;
+            }
+
+            const center = stableHitSamples.reduce(
+                (sum, sample) => sum.add(sample.position), new THREE.Vector3()
+            ).multiplyScalar(1 / stableHitSamples.length);
+            const referenceNormal = stableHitSamples[0].normal;
+            const maxPositionDelta = Math.max(...stableHitSamples.map(sample => sample.position.distanceTo(center)));
+            const maxNormalDelta = Math.max(...stableHitSamples.map(sample => sample.normal.angleTo(referenceNormal)));
+            return maxPositionDelta <= STABLE_HIT_MAX_POSITION_DELTA_METERS &&
+                maxNormalDelta <= STABLE_HIT_MAX_NORMAL_DELTA_RADIANS;
+        }
+
+        async function createNativeAnchor(hit, hitPose, referenceSpace, frame) {
+            // hit.createAnchor 让实现可把锚点关联到被命中的真实平面；
+            // 部分实现仅提供 XRFrame.createAnchor，因此两者都支持。
+            if (typeof hit.createAnchor === 'function') {
+                return hit.createAnchor();
+            }
+            if (typeof frame.createAnchor === 'function') {
+                return frame.createAnchor(hitPose.transform, referenceSpace);
+            }
+            return null;
+        }
+
+        function updateNativeAnchorPose(frame, referenceSpace) {
+            if (!xrAnchor) return;
+            const pose = frame.getPose(xrAnchor.anchorSpace, referenceSpace);
+            if (pose) setObjectPoseFromXRPose(arAnchor, pose);
+        }
+
+        async function createARAnchor(hit, hitPose, referenceSpace, frame) {
+            isCreatingArAnchor = true;
+            const threeAnchor = new THREE.Group();
+            arAnchor = threeAnchor;
+            // 原生锚点异步创建期间先使用当前命中姿态，避免出现空白帧。
+            setObjectPoseFromXRPose(threeAnchor, hitPose);
+            threeAnchor.matrixWorldNeedsUpdate = true;
+            scene.add(threeAnchor);
+            stableHitSamples = [];
+            let createdAnchor = null;
+            try {
+                createdAnchor = await createNativeAnchor(hit, hitPose, referenceSpace, frame);
+                if (arAnchor !== threeAnchor || !xrSession) {
+                    // 会话在异步创建期间已经结束，不能把过期锚点挂回新会话。
+                    if (createdAnchor) createdAnchor.delete();
+                    return;
+                }
+                xrAnchor = createdAnchor;
+                if (createdAnchor) {
+                    console.log('已创建原生 XRAnchor，将使用设备的重定位修正');
+                } else {
+                    console.warn('当前设备不支持 XRAnchor，回退 local-floor 局部坐标');
+                }
+            } catch (error) {
+                console.warn('创建 XRAnchor 失败，回退 local-floor 局部坐标:', error.message);
+                xrAnchor = null;
+            } finally {
+                isCreatingArAnchor = false;
+            }
+
+            if (arAnchor !== threeAnchor || !xrSession) return;
             
             // 在锚点位置创建地面网格指示器，用于可视化确认锚定位置
-            createGroundPlaneIndicator(arAnchor);
+            createGroundPlaneIndicator(threeAnchor);
             
             // 显示网格控制栏（AR模式也支持网格控制）
             showGridControlBar();
@@ -4606,7 +4834,7 @@
                 
                 const session = await navigator.xr.requestSession('immersive-ar', {
                     requiredFeatures: ['hit-test', 'local-floor'],
-                    optionalFeatures: ['dom-overlay'],
+                    optionalFeatures: ['dom-overlay', 'anchors'],
                     domOverlay: { root: document.body }
                 });
                 
@@ -5397,8 +5625,8 @@
                 // 隐藏遮罩显示AR按钮
                 overlay.classList.remove('hidden');
                 overlayIcon.textContent = '📍';
-                overlayTitle.textContent = '正在获取位置信息';
-                overlayText.textContent = '请允许浏览器获取您的位置权限';
+                overlayTitle.textContent = '正在获取RTK定位';
+                overlayText.textContent = '优先使用RTK固定解；不可用时会请求手机定位权限';
             } else if (module === 'ply-editor') {
                 // PLY编辑模式
                 startPlyEditorMode();
