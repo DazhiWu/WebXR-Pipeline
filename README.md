@@ -7,7 +7,7 @@
 - ✅ **多端兼容**：支持 Android/iOS 现代浏览器、微信浏览器、Chrome、Edge、Safari
 - ✅ **RTK 优先定位**：优先采用 RTK 固定解；不可用、精度不足或超时时自动回退手机定位
 - ✅ **3D 管线可视化**：预设多组地下管网数据，自动经纬度转 3D 坐标
-- ✅ **WebXR AR 模式**：真实地面检测与对齐，贴地不悬浮不穿地
+- ✅ **WebXR AR 模式**：水平地面检测与局部空间放置，稳定性取决于设备空间追踪
 - ✅ **半透明透视效果**：管线默认地下半透明显示
 - ✅ **射线拾取交互**：点击管线弹窗展示详细信息
 - ✅ **多类型管线**：给水（蓝）、排水（灰）、燃气（橙）
@@ -137,7 +137,9 @@ WebXR2/
 - 在渲染循环中持续执行 hit test
 - 检测到地面时显示环形标记
 - 自动创建 AR 锚点，将管网模型锚定到真实地面
-- 锚点确保模型在设备移动时保持位置稳定
+- 支持时使用原生 XRAnchor；否则保留 local-floor 参考系中的固定放置变换。
+- 每帧检查 viewer pose 和锚点姿态；追踪丢失或位置为 emulatedPosition 时隐藏模型与网格、暂停地面采样，恢复后继续使用原锚点。
+- PLY 的局部空间放置不依赖 RTK/GPS。RTK 提供地理定位，不能替代相机与惯性传感器的 6DoF 空间追踪；快速摆动、弱光或缺少纹理仍可能造成漂移。上述保护不能消除设备返回有效姿态时的 SLAM 误差，需在真实手机上验收。
 
 ### 7. 射线拾取交互 (`onPointerDown`, `showPipelineDetail`)
 
@@ -199,6 +201,21 @@ GLB 模型加载模块支持标准 GLB（GLTF Binary）格式文件的完整加�
 
 ## PLY 移动端优化示例
 
+### 独立网页查看器
+
+`demos/` 是完全独立的查看器项目，包含自身的页面、依赖锁文件和示例模型。可以把整个文件夹交给别人，无需提供父项目。
+
+```bash
+cd demos
+npm ci
+npm run dev
+# 浏览器打开 http://127.0.0.1:8081/
+```
+
+自动读取 `demos/public/models/` 下的 PLY 并生成缩略图列表，点击卡片即可查看；支持旋转、缩放、平移及自动取景，并在模型下方显示可切换的网格地面。运行 `npm run build` 生成 `demos/dist/`，可独立部署。详情见[独立 Demo 说明](demos/README.md)。根目录的 `dev:viewer`、`build:viewer` 只是转发到此独立项目；首次也需要在 `demos` 安装依赖。
+
+### 离线压缩
+
 `models/test_model.ply` 原始文件包含 4,910,038 个 Gaussian、大小约 79.9 MB。项目保留原文件作为高清源，并生成了移动端版本：
 
 | 文件 | Gaussian 数量 | 文件大小 | 用途 |
@@ -206,22 +223,16 @@ GLB 模型加载模块支持标准 GLB（GLTF Binary）格式文件的完整加�
 | `models/test_model.ply` | 4,910,038 | 79.9 MB | 原始高清源，不直接提供给手机加载 |
 | `models/test_model.mobile.compressed.ply` | 500,000 | 约 7.8 MB | 手机 AR 推荐加载 |
 
-移动端版本使用自适应误差降点，并按 Morton 空间顺序重新排列后输出为 packed PLY。可通过以下命令复现：
+移动端版本使用自适应误差降点，并按 Morton 空间顺序重新排列后输出为 packed PLY。现已封装为[独立压缩工具](tools/ply-compressor/README.md)，支持命令行与 JavaScript 函数调用，可复制整个目录到其他项目复用（Node.js 22+）。
 
 ```bash
-npx --yes @playcanvas/splat-transform@3.3.3 -w \
-  models/test_model.ply \
-  --filter-nan \
-  --decimate-adaptive 500000 \
-  /tmp/test_model.mobile.ply \
-  --memory --no-tty
-
-npx --yes @playcanvas/splat-transform@3.3.3 -w \
-  /tmp/test_model.mobile.ply \
-  --morton-order \
-  models/test_model.mobile.compressed.ply \
-  --memory --no-tty
+npm ci --prefix tools/ply-compressor
+npm run compress:ply -- models/test_model.ply
+# 自定义输出和 Gaussian 数量上限
+npm run compress:ply -- models/test_model.ply -o /tmp/test_model.small.compressed.ply --max-gaussians 250000
 ```
+
+默认输出为输入旁的 `*.mobile.compressed.ply`；已有文件不会覆盖。仓库已包含示例输出，因此重新生成时请指定其他输出路径。该工具面向 Gaussian Splat PLY，有损降点和量化不保证任意模型的视觉质量，需按目标手机调节数量并验收。
 
 加载器对 PLY 启用了渐进显示、整数排序、半精度协方差纹理和中间数据释放。移动设备还会限制像素比和 XR framebuffer scale。新的大模型应先制作类似的移动端 LOD，不要只依赖运行时压缩。
 

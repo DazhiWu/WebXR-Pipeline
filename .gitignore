@@ -11,3 +11,6 @@ ply-local-splat-desktop.png
 test_result.txt
 test-model-desktop-optimized.png
 test-model-mobile-layout.png
+dist-viewer/
+/tools
+/demos

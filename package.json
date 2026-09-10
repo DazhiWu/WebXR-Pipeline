@@ -4,6 +4,9 @@
   "description": "WebAR地下管网多端兼容Demo",
   "main": "index.html",
   "scripts": {
+    "dev:viewer": "npm --prefix demos run dev",
+    "build:viewer": "npm --prefix demos run build",
+    "compress:ply": "node tools/ply-compressor/compress-ply.mjs",
     "dev": "npx serve . -l 8080",
     "dev-ssl": "npx serve . -l 8443 --ssl-cert localhost.pem --ssl-key localhost-key.pem",
     "build": "vite build"
