@@ -47,6 +47,11 @@ export default defineConfig({
         })
         this.emitFile({
           type: 'asset',
+          fileName: 'models/point_cloud_2999.ply',
+          source: require('fs').readFileSync(resolve(__dirname, 'models/point_cloud_2999.ply'))
+        })
+        this.emitFile({
+          type: 'asset',
           fileName: 'highway.geojsonl.json',
           source: require('fs').readFileSync(resolve(__dirname, 'highway.geojsonl.json'))
         })
