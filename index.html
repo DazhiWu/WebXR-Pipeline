@@ -3419,7 +3419,7 @@
                 groundDetected = true;
                 
                 // 如果已选择模型，加载模型到锚点位置
-                if (selectedModelPath) {
+                if (displayMode === 'single' && selectedModelPath) {
                     const loadedViewer = await loadPlyModel(selectedModelPath, arAnchor);
                     if (!loadedViewer) {
                         instructions.textContent = '模型加载失败，请重试或选择较小模型';
@@ -5197,27 +5197,6 @@
         }
 
         function cleanupSplitResources() {
-            // 清理AR模式的canvas覆盖层
-            const canvasA = document.getElementById('split-canvas-a');
-            const canvasB = document.getElementById('split-canvas-b');
-            if (canvasA) {
-                canvasA.remove();
-            }
-            if (canvasB) {
-                canvasB.remove();
-            }
-            
-            // 清理AR模式的渲染器
-            if (window.splitRenderers) {
-                if (window.splitRenderers.rendererA) {
-                    window.splitRenderers.rendererA.dispose();
-                }
-                if (window.splitRenderers.rendererB) {
-                    window.splitRenderers.rendererB.dispose();
-                }
-                window.splitRenderers = null;
-            }
-            
             // 清理桌面模式的合成场景
             if (window.splitScene) {
                 if (window.splitPlane) {
@@ -5246,7 +5225,9 @@
         async function loadDualModels(modelPathA, modelPathB, parentGroup) {
             console.log('开始加载双模型:', modelPathA, modelPathB);
             
-            // 清理所有相关资源（包括AR模式的canvas、渲染器、桌面模式的合成场景等）
+            splatLoaded = false;
+            showGlbLoading('正在加载对比模型 A');
+            // 清理桌面模式的离屏渲染资源
             cleanupSplitResources();
             
             // 清理旧模型
@@ -5256,7 +5237,7 @@
                 if (dropInViewerA.children.length > 0) {
                     const viewer = dropInViewerA.children[0];
                     if (viewer.dispose) {
-                        viewer.dispose();
+                        await viewer.dispose().catch(console.warn);
                     }
                 }
                 dropInViewerA = null;
@@ -5267,7 +5248,7 @@
                 if (dropInViewerB.children.length > 0) {
                     const viewer = dropInViewerB.children[0];
                     if (viewer.dispose) {
-                        viewer.dispose();
+                        await viewer.dispose().catch(console.warn);
                     }
                 }
                 dropInViewerB = null;
@@ -5276,7 +5257,7 @@
                 if (arAnchor) arAnchor.remove(dropInViewer);
                 else scene.remove(dropInViewer);
                 if (dropInViewer.dispose) {
-                    dropInViewer.dispose();
+                    await dropInViewer.dispose().catch(console.warn);
                 }
                 dropInViewer = null;
             }
@@ -5289,22 +5270,25 @@
                     return;
                 }
                 
-                // 创建渲染目标
-                const width = window.innerWidth;
-                const height = window.innerHeight;
-                renderTargetA = new THREE.WebGLRenderTarget(width, height, {
-                    minFilter: THREE.LinearFilter,
-                    magFilter: THREE.LinearFilter,
-                    format: THREE.RGBAFormat,
-                    colorSpace: THREE.SRGBColorSpace
-                });
-                renderTargetB = new THREE.WebGLRenderTarget(width, height, {
-                    minFilter: THREE.LinearFilter,
-                    magFilter: THREE.LinearFilter,
-                    format: THREE.RGBAFormat,
-                    colorSpace: THREE.SRGBColorSpace
-                });
+                if (!isARActive) {
+                    // 创建渲染目标
+                    const width = window.innerWidth;
+                    const height = window.innerHeight;
+                    renderTargetA = new THREE.WebGLRenderTarget(width, height, {
+                        minFilter: THREE.LinearFilter,
+                        magFilter: THREE.LinearFilter,
+                        format: THREE.RGBAFormat,
+                        colorSpace: THREE.SRGBColorSpace
+                    });
+                    renderTargetB = new THREE.WebGLRenderTarget(width, height, {
+                        minFilter: THREE.LinearFilter,
+                        magFilter: THREE.LinearFilter,
+                        format: THREE.RGBAFormat,
+                        colorSpace: THREE.SRGBColorSpace
+                    });
                 
+                }
+
                 // 创建两个Group分别存放模型
                 dropInViewerA = new THREE.Group();
                 dropInViewerB = new THREE.Group();
@@ -5318,12 +5302,17 @@
                     freeIntermediateSplatData: true,
                     ignoreDevicePixelRatio: isMobileDevice(),
                     inMemoryCompressionLevel: 2,
-                    sphericalHarmonicsDegree: 0
+                    sphericalHarmonicsDegree: 0,
+                    sceneRevealMode: GaussianSplats3D.SceneRevealMode.Instant
                 });
                 dropInViewerA.add(viewerA);
                 parentGroup.add(dropInViewerA);
                 
                 await viewerA.addSplatScene(modelPathA, {
+                    onProgress: (percent) => {
+                        updateGlbProgress(Number(percent) || 0);
+                        document.getElementById('glb-loading-text').textContent = `正在加载对比模型 A ${Math.round(Number(percent) || 0)}%`;
+                    },
                     position: [0, -1, 0],
                     scale: [1, 1, 1],
                     showLoadingUI: false,
@@ -5340,12 +5329,17 @@
                     freeIntermediateSplatData: true,
                     ignoreDevicePixelRatio: isMobileDevice(),
                     inMemoryCompressionLevel: 2,
-                    sphericalHarmonicsDegree: 0
+                    sphericalHarmonicsDegree: 0,
+                    sceneRevealMode: GaussianSplats3D.SceneRevealMode.Instant
                 });
                 dropInViewerB.add(viewerB);
                 parentGroup.add(dropInViewerB);
                 
                 await viewerB.addSplatScene(modelPathB, {
+                    onProgress: (percent) => {
+                        updateGlbProgress(Number(percent) || 0);
+                        document.getElementById('glb-loading-text').textContent = `正在加载对比模型 B ${Math.round(Number(percent) || 0)}%`;
+                    },
                     position: [0, -1, 0],
                     scale: [1, 1, 1],
                     showLoadingUI: false,
@@ -5359,17 +5353,14 @@
                 dropInViewerA.scale.set(1, 1, 1);
                 dropInViewerB.scale.set(1, 1, 1);
                 
-                // 为AR模式创建双canvas实现卷帘效果
-                if (isARActive) {
-                    createSplitCanvasOverlay();
-                }
-                
                 splatLoaded = true;
                 console.log('双模型加载成功');
                 showTemporaryMessage('双模型加载成功，拖动分割线进行对比');
             } catch (error) {
                 console.error('加载双模型失败:', error);
                 showTemporaryMessage('模型加载失败: ' + error.message);
+            } finally {
+                hideGlbLoading();
             }
         }
 
@@ -5465,45 +5456,44 @@
             }
         }
         
-        function createSplitCanvasOverlay() {
-            // 创建两个canvas覆盖层
-            const canvasA = document.createElement('canvas');
-            canvasA.id = 'split-canvas-a';
-            canvasA.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                pointer-events: none;
-                z-index: 10;
-            `;
-            
-            const canvasB = document.createElement('canvas');
-            canvasB.id = 'split-canvas-b';
-            canvasB.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                pointer-events: none;
-                z-index: 11;
-            `;
-            
-            document.body.appendChild(canvasA);
-            document.body.appendChild(canvasB);
-            
-            // 创建两个额外的渲染器用于AR模式
-            const rendererA = new THREE.WebGLRenderer({ canvas: canvasA, alpha: true });
-            const rendererB = new THREE.WebGLRenderer({ canvas: canvasB, alpha: true });
-            
-            rendererA.setSize(window.innerWidth, window.innerHeight);
-            rendererB.setSize(window.innerWidth, window.innerHeight);
-            rendererA.setPixelRatio(window.devicePixelRatio);
-            rendererB.setPixelRatio(window.devicePixelRatio);
-            
-            window.splitRenderers = { rendererA, rendererB };
+        // Use the existing XR framebuffer: never upload the same splats to extra contexts.
+        function renderARSplitView() {
+            const oldScissor = renderer.getScissor(new THREE.Vector4());
+            const oldScissorTest = renderer.getScissorTest();
+            const oldAutoClear = renderer.autoClear;
+            const visibleA = dropInViewerA.visible;
+            const visibleB = dropInViewerB.visible;
+            const pixelRatio = renderer.getPixelRatio();
+            const xrCamera = renderer.xr.getCamera();
+            const viewport = xrCamera.cameras[0]?.viewport;
+            if (!viewport) {
+                renderer.render(scene, camera);
+                return;
+            }
+            // XR viewports are physical pixels; setScissor accepts renderer logical pixels.
+            const splitWidth = Math.round(viewport.z * splitPosition);
+            try {
+                renderer.setScissorTest(false);
+                renderer.autoClear = false;
+                renderer.clear();
+                renderer.setScissorTest(true);
+                dropInViewerA.visible = true;
+                dropInViewerB.visible = false;
+                renderer.setScissor(viewport.x / pixelRatio, viewport.y / pixelRatio,
+                    splitWidth / pixelRatio, viewport.w / pixelRatio);
+                renderer.render(scene, camera);
+                dropInViewerA.visible = false;
+                dropInViewerB.visible = true;
+                renderer.setScissor((viewport.x + splitWidth) / pixelRatio, viewport.y / pixelRatio,
+                    (viewport.z - splitWidth) / pixelRatio, viewport.w / pixelRatio);
+                renderer.render(scene, camera);
+            } finally {
+                dropInViewerA.visible = visibleA;
+                dropInViewerB.visible = visibleB;
+                renderer.autoClear = oldAutoClear;
+                renderer.setScissor(oldScissor);
+                renderer.setScissorTest(oldScissorTest);
+            }
         }
 
         function updateSplitView() {
@@ -5514,43 +5504,7 @@
             const splitX = splitPosition * width;
             
             if (isARActive) {
-                // AR模式：使用双canvas + CSS clip-path实现卷帘效果
-                const { rendererA, rendererB } = window.splitRenderers || {};
-                
-                if (rendererA && rendererB) {
-                    // 主canvas：只渲染相机画面（隐藏两个模型）
-                    dropInViewerA.visible = false;
-                    dropInViewerB.visible = false;
-                    renderer.render(scene, camera);
-                    
-                    // 渲染模型A到canvasA（左侧）
-                    dropInViewerA.visible = true;
-                    dropInViewerB.visible = false;
-                    rendererA.render(scene, camera);
-                    
-                    // 渲染模型B到canvasB（右侧）
-                    dropInViewerA.visible = false;
-                    dropInViewerB.visible = true;
-                    rendererB.render(scene, camera);
-                    
-                    // 恢复两个模型的可见性（供下一次渲染使用）
-                    dropInViewerA.visible = true;
-                    dropInViewerB.visible = true;
-                    
-                    // 更新CSS clip-path
-                    const canvasA = document.getElementById('split-canvas-a');
-                    const canvasB = document.getElementById('split-canvas-b');
-                    
-                    if (canvasA) {
-                        canvasA.style.clipPath = `inset(0 ${width - splitX}px 0 0)`;
-                    }
-                    if (canvasB) {
-                        canvasB.style.clipPath = `inset(0 0 0 ${splitX}px)`;
-                    }
-                } else {
-                    // 备用方案：直接渲染完整场景
-                    renderer.render(scene, camera);
-                }
+                renderARSplitView();
             } else {
                 // 桌面模式：使用渲染目标实现卷帘效果
                 if (!renderTargetA || !renderTargetB) return;
